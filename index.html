@@ -455,7 +455,7 @@ function renderHome(){
   document.getElementById('hDate').textContent=now.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 
   const sc=score(me.name);
-  const pl=(groupData.players||[]).find(p=>p.name===me.name)||me;
+  const pl=(season.roster||[]).find(p=>p.name===me.name)||me;
   const tc=pl.team==='A'?'#ef4444':pl.team==='B'?'#3b82f6':'#22c55e';
 
   // Daily fact
@@ -467,7 +467,7 @@ function renderHome(){
       <div class="hero-stripe" style="background:${tc}"></div>
       <div class="hero-label">Your points</div>
       <div class="hero-pts" style="color:${tc}">${sc.total}</div>
-      <div class="hero-sub">Rank #${getRank(me.name)} of ${(groupData.players||[]).length} · Team ${pl.team}</div>
+      <div class="hero-sub">Rank #${getRank(me.name)} of ${(season.roster||[]).length} · Team ${pl.team}</div>
     </div>`;
 
   // Nudge card
@@ -540,9 +540,9 @@ function renderHome(){
 
   // Team streak card
   const team=pl.team;
-  const teamMembers=(groupData.players||[]).filter(p=>p.team===team);
+  const teamMembers=(season.roster||[]).filter(p=>p.team===team);
   const threshold=Math.ceil(teamMembers.length*0.6);
-  const teamLogs=allLogs.filter(l=>(groupData.players||[]).find(p=>p.name===l.player&&p.team===team));
+  const teamLogs=allLogs.filter(l=>(season.roster||[]).find(p=>p.name===l.player&&p.team===team));;
   const dc={};
   teamLogs.forEach(l=>{ if(!dc[l.day]) dc[l.day]=new Set(); dc[l.day].add(l.player); });
   const bonusDays=Object.entries(dc).filter(([d,ps])=>ps.size>=threshold).map(([d])=>+d).sort((a,b)=>a-b);
@@ -563,12 +563,12 @@ function showCalTip(el,text){
 }
 
 function getRank(playerName){
-  const sorted=(groupData.players||[]).map(p=>({name:p.name,pts:score(p.name).total})).sort((a,b)=>b.pts-a.pts);
+  const sorted=(season.roster||[]).map(p=>({name:p.name,pts:score(p.name).total})).sort((a,b)=>b.pts-a.pts);
   return sorted.findIndex(p=>p.name===playerName)+1;
 }
 
 function getNudgeHTML(playerName,sc){
-  const sorted=(groupData.players||[]).map(p=>({name:p.name,pts:score(p.name).total})).sort((a,b)=>b.pts-a.pts);
+  const sorted=(season.roster||[]).map(p=>({name:p.name,pts:score(p.name).total})).sort((a,b)=>b.pts-a.pts);
   const myIdx=sorted.findIndex(p=>p.name===playerName);
   const myPts=sorted[myIdx]?.pts||0;
   if(myIdx===0){
@@ -585,7 +585,7 @@ function getNudgeHTML(playerName,sc){
 function pickDay(t){
   if(t==='today'){
     const now=new Date();
-    if(now.getMonth()+1!==groupData.month||now.getFullYear()!==groupData.year){ alert(`Today is not in the active month (${groupData.month}/${groupData.year})`); return; }
+    if(now.getMonth()+1!==season.month||now.getFullYear()!==season.year){ alert(`Today is not in the active month (${season.month}/${season.year})`); return; }
     selDay=now.getDate();
   }
   goS2();
@@ -595,7 +595,7 @@ function pickDayFromInput(){ const v=document.getElementById('dpick').value; if(
 function goS2(){
   document.getElementById('ls1').classList.add('hidden');
   document.getElementById('ls2').classList.remove('hidden');
-  const {month,year}=groupData;
+  const {month,year}=season;
   const dt=new Date(year,month-1,selDay);
   document.getElementById('lDateLbl').textContent=dt.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'});
   const ex=allLogs.filter(l=>l.player===me.name&&l.day===selDay).flatMap(l=>l.workouts||[l.workout]).filter(Boolean);
@@ -635,8 +635,8 @@ function backToS1(){ document.getElementById('ls1').classList.remove('hidden'); 
 
 // ── LEADERBOARD ───────────────────────────────────────────────────────────
 function renderLB(){
-  if(!groupData) return;
-  const players=groupData.players||[];
+  if(!season) return;
+  const players=season.roster||[];
   const teams=[...new Set(players.map(p=>p.team))];
   const tcol=t=>t==='A'?'var(--A)':t==='B'?'var(--B)':'var(--C)';
   const ts=teams.map(t=>({t,s:teamTotal(t),count:players.filter(p=>p.team===t).length})).sort((a,b)=>b.s-a.s);
@@ -670,7 +670,7 @@ function renderLB(){
     </div>`).join('');
 
   const my=score(me.name);
-  const pl=(groupData.players||[]).find(p=>p.name===me.name)||me;
+  const pl=(season.roster||[]).find(p=>p.name===me.name)||me;
   document.getElementById('ptsBk').innerHTML=`
     <div class="card-title">Your breakdown — ${me.name}</div>
     ${[
@@ -698,17 +698,17 @@ function renderFeed(){
   const tcol=t=>t==='A'?'var(--A)':t==='B'?'var(--B)':'var(--C)';
   const tbg=t=>t==='A'?'var(--Al)':t==='B'?'var(--Bl)':'var(--Cl)';
   const now=new Date();
-  const todayDay=now.getMonth()+1===groupData.month&&now.getFullYear()===groupData.year?now.getDate():-1;
+  const todayDay=now.getMonth()+1===season.month&&now.getFullYear()===season.year?now.getDate():-1;
 
   // Feed stats
   const todayPlayers=new Set(allLogs.filter(l=>l.day===todayDay).map(l=>l.player));
   const todayCount=todayPlayers.size;
-  const total=(groupData.players||[]).length;
+  const total=(season.roster||[]).length;
   const teamCounts={A:0,B:0,C:0};
-  todayPlayers.forEach(name=>{ const p=(groupData.players||[]).find(x=>x.name===name); if(p) teamCounts[p.team]++; });
+  todayPlayers.forEach(name=>{ const p=(season.roster||[]).find(x=>x.name===name); if(p) teamCounts[p.team]++; });
   const topTeamEntry=Object.entries(teamCounts).sort((a,b)=>b[1]-a[1])[0];
   const topTeam=topTeamEntry[1]>0?topTeamEntry[0]:null;
-  const allStreaks=(groupData.players||[]).map(p=>({name:p.name,streak:score(p.name).streak})).filter(p=>p.streak>0).sort((a,b)=>b.streak-a.streak);
+  const allStreaks=(season.roster||[]).map(p=>({name:p.name,streak:score(p.name).streak})).filter(p=>p.streak>0).sort((a,b)=>b.streak-a.streak);
   const topStreak=allStreaks[0]?.streak||0;
   const topStreakers=allStreaks.filter(p=>p.streak===topStreak);
 
@@ -733,7 +733,7 @@ function renderFeed(){
     const ts=l.timestamp?.seconds?new Date(l.timestamp.seconds*1000):null;
     const tstr=ts?ts.toLocaleDateString('en-IN',{day:'numeric',month:'short'})+' · '+ts.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):`Day ${l.day}`;
     const isMine=l.player===me.name;
-    const ct=(groupData.players||[]).find(x=>x.name===l.player)?.team||l.team;
+    const ct=(season.roster||[]).find(x=>x.name===l.player)?.team||l.team;
     const flagCount=flags.filter(f=>f.logId===l.id).length;
     const alreadyFlagged=flags.some(f=>f.logId===l.id&&f.flaggedBy===me.name);
     const isBacklog=l.day<todayDay&&ts&&ts.toDateString()===now.toDateString();
@@ -786,7 +786,7 @@ async function resolveFlag(logId,action){
 
 // ── ADMIN ─────────────────────────────────────────────────────────────────
 function renderAdminRoles(){
-  const players=groupData.players||[];
+  const players=season.roster||[];
   document.getElementById('adminRoles').innerHTML=players.map(p=>`
     <div style="display:grid;grid-template-columns:1fr 80px 130px;gap:6px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
       <span style="font-size:13px;font-weight:600">${p.name}</span>
@@ -802,8 +802,8 @@ function renderAdminRoles(){
 }
 
 async function saveRoles(){
-  const players=JSON.parse(JSON.stringify(groupData.players||[]));
-  players.forEach(p=>{
+  const roster=JSON.parse(JSON.stringify(season.roster||[]));
+  roster.forEach(p=>{
     const t=document.getElementById(`team_${p.name}`)?.value;
     const r=document.getElementById(`role_${p.name}`)?.value;
     if(t) p.team=t;
@@ -811,8 +811,8 @@ async function saveRoles(){
     if(me.name===p.name){ me.team=p.team; me.role=p.role; }
   });
   try {
-    await db.collection('groups').doc(groupCode).update({players});
-    groupData.players=players;
+    await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).update({roster});
+    season.roster=roster;
     localStorage.setItem('forge_session',JSON.stringify({code:groupCode,player:me}));
     renderAdminRoles(); refresh();
     alert('✅ Roles saved');
@@ -867,13 +867,18 @@ async function loadSuperAdmin(){
         </div>
       </div>`).join('');
 }
-function superViewGroup(code){
+async function superViewGroup(code){
   groupCode=code;
-  db.collection('groups').doc(code).get().then(snap=>{
-    groupData=snap.data();
-    me=groupData.players?.[0]||{name:'Admin',team:'A',role:'Player'};
-    launchApp();
-  });
+  const gSnap=await db.collection('groups').doc(code).get();
+  groupData=gSnap.data();
+  const sid=groupData.currentSeasonId;
+  if(!sid){ alert('This group has no active season.'); return; }
+  const sSnap=await db.collection('groups').doc(code).collection('seasons').doc(sid).get();
+  if(!sSnap.exists){ alert('Active season missing.'); return; }
+  season=sSnap.data();
+  seasonId=sid;
+  me=(season.roster&&season.roster[0])||{name:'Admin',team:'A',role:'Player'};
+  launchApp();
 }
 function exitSuper(){ showScreen('super'); }
 async function createGroup(){

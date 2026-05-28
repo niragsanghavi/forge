@@ -1,12 +1,11 @@
-// Bridge helper — returns season config if loaded, else falls back to groupData.
-// Commit 2 removes the fallback and reads only from window.season.
+// Season-only config + roster accessors.
+// (The groupData fallback bridge from Commit 1 has been removed — by the time
+//  score() runs, window.season is always loaded by loadGroup/verifyCode.)
 function _cfg(){
-  if(window.season) return window.season;
-  return window.groupData || {};
+  return window.season || {};
 }
 function _roster(){
-  if(window.season && Array.isArray(window.season.roster)) return window.season.roster;
-  return (window.groupData && window.groupData.players) || [];
+  return (window.season && Array.isArray(window.season.roster)) ? window.season.roster : [];
 }
 
 function score(playerName){
