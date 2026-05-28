@@ -857,14 +857,15 @@ async function loadSuperAdmin(){
   document.getElementById('superGroupList').innerHTML=groups.length===0
     ?'<div class="tmuted">No groups yet</div>'
     :groups.map(g=>`
-      <div class="admin-group-card" onclick="superViewGroup('${g.code}')">
-        <div class="row">
+      <div class="admin-group-card">
+        <div class="row" onclick="superViewGroup('${g.code}')" style="cursor:pointer">
           <div>
             <div style="font-size:15px;font-weight:700">${g.name}</div>
-            <div style="font-size:12px;color:var(--muted);margin-top:3px">${g.players?.length||0} players · Month ${g.month}/${g.year}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:3px">${g.players?.length||0} players · current season ${g.currentSeasonId||'—'}</div>
           </div>
           <div style="font-size:20px;font-weight:800;letter-spacing:3px;color:var(--gold)">${g.code}</div>
         </div>
+        <button class="btn btn-surface btn-sm" style="margin-top:10px" onclick="event.stopPropagation();startNewSeason('${g.code}')">↻ Start New Season</button>
       </div>`).join('');
 }
 async function superViewGroup(code){
@@ -879,6 +880,72 @@ async function superViewGroup(code){
   seasonId=sid;
   me=(season.roster&&season.roster[0])||{name:'Admin',team:'A',role:'Player'};
   launchApp();
+}
+// ── START NEW SEASON ──────────────────────────────────────────────────────
+// Archives the group's current active season and creates the next one,
+// carrying the roster (names+teams+roles), targets, and rolesEnabled forward.
+// Logs/bonuses/flags are untouched — they stay scoped to their own month+year,
+// so the archived season stays frozen and the new season starts with a clean board.
+async function startNewSeason(code){
+  const gSnap = await db.collection('groups').doc(code).get();
+  if(!gSnap.exists){ alert('Group not found.'); return; }
+  const g = gSnap.data();
+  const curSid = g.currentSeasonId;
+  if(!curSid){ alert('Group has no active season to roll over from.'); return; }
+  const curSnap = await db.collection('groups').doc(code).collection('seasons').doc(curSid).get();
+  if(!curSnap.exists){ alert('Current season doc missing.'); return; }
+  const cur = curSnap.data();
+
+  // Gather the new season parameters
+  const month = parseInt(prompt(`New season — month (1-12)?\n(Current active: ${cur.month}/${cur.year})`));
+  if(!month || month<1 || month>12){ alert('Invalid month.'); return; }
+  const year = parseInt(prompt('New season — year?', cur.year));
+  if(!year){ alert('Invalid year.'); return; }
+  const newSid = seasonIdOf(month, year);
+
+  if(newSid === curSid){ alert('That season is already the active one.'); return; }
+
+  // Refuse to clobber an existing season doc (guards double-rollover)
+  const existing = await db.collection('groups').doc(code).collection('seasons').doc(newSid).get();
+  if(existing.exists){ alert(`A ${newSid} season already exists for this group. Aborting to avoid overwriting it.`); return; }
+
+  const days = parseInt(prompt('Days in the new month?', new Date(year, month, 0).getDate()));
+  if(!days){ alert('Invalid day count.'); return; }
+
+  const carryRoster = confirm('Carry forward the roster (same players, teams, roles)?\n\nOK = carry forward\nCancel = start with empty roster');
+  const newRoster = carryRoster ? JSON.parse(JSON.stringify(cur.roster||[])) : [];
+
+  const keepRoles = confirm('Keep Captain/Vice Captain roles enabled this season?\n\nOK = enabled\nCancel = disabled (everyone is a Player, no role bonuses)');
+
+  const now = firebase.firestore.FieldValue.serverTimestamp();
+  const batch = db.batch();
+
+  // 1. Archive current season
+  const curRef = db.collection('groups').doc(code).collection('seasons').doc(curSid);
+  batch.update(curRef, { status:'archived', endedAt:now });
+
+  // 2. Create new active season
+  const newRef = db.collection('groups').doc(code).collection('seasons').doc(newSid);
+  batch.set(newRef, {
+    month, year, days,
+    capTarget: cur.capTarget ?? 16,
+    vcTarget: cur.vcTarget ?? 20,
+    minWorkouts: cur.minWorkouts ?? 12,
+    rolesEnabled: keepRoles,
+    roster: newRoster,
+    status: 'active',
+    startedAt: now,
+    endedAt: null
+  });
+
+  // 3. Point the group at the new season
+  batch.update(db.collection('groups').doc(code), { currentSeasonId: newSid });
+
+  try {
+    await batch.commit();
+    alert(`✅ ${cur.month}/${cur.year} archived. ${month}/${year} is now the active season${carryRoster?` with ${newRoster.length} players carried over`:' (empty roster)'}.\n\nTip: adjust teams/roles in Admin → Team & Role Assignment if needed.`);
+    loadSuperAdmin();
+  } catch(e){ console.error(e); alert('❌ Rollover failed: '+e.message); }
 }
 function exitSuper(){ showScreen('super'); }
 async function createGroup(){
