@@ -56,9 +56,13 @@ window.TWIST_LIBRARY = [
 ];
 
 // ── SHARED STATE ──────────────────────────────────────────────────────────
-window.me = null;
-window.groupData = null;
+window.me = null;            // current player {name, team, role} — resolved from season roster
+window.groupData = null;     // {name, players:[{name}], currentSeasonId, createdAt}
 window.groupCode = null;
+window.season = null;        // {month, year, days, capTarget, vcTarget, minWorkouts,
+                             //  rolesEnabled, roster:[{name,team,role}], status, ...}
+window.seasonId = null;      // "YYYY-MM" string e.g. "2026-07"
+
 window.allLogs = [];
 window.bonus30 = [];
 window.flags = [];
@@ -67,3 +71,16 @@ window.selDay = null;
 window.selW = [];
 window.adminUnlocked = false;
 window.unsub = [];
+
+// ── HELPERS ───────────────────────────────────────────────────────────────
+// Format a season ID from month+year. Always zero-padded: "2026-07" not "2026-7".
+window.seasonIdOf = function(month, year){
+  return `${year}-${String(month).padStart(2,'0')}`;
+};
+
+// Look up a player's team+role from the current season's roster.
+// Returns null if player not on roster.
+window.rosterEntry = function(name){
+  if(!window.season || !Array.isArray(window.season.roster)) return null;
+  return window.season.roster.find(p => p.name === name) || null;
+};

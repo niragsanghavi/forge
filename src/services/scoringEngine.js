@@ -1,8 +1,23 @@
+// Bridge helper — returns season config if loaded, else falls back to groupData.
+// Commit 2 removes the fallback and reads only from window.season.
+function _cfg(){
+  if(window.season) return window.season;
+  return window.groupData || {};
+}
+function _roster(){
+  if(window.season && Array.isArray(window.season.roster)) return window.season.roster;
+  return (window.groupData && window.groupData.players) || [];
+}
+
 function score(playerName){
-  const p = (groupData.players||[]).find(x=>x.name===playerName);
+  const roster = _roster();
+  const p = roster.find(x => x.name === playerName);
   if(!p) return {wo:0,base:0,sb:0,wb:0,rb:0,tb:0,b30:0,pen:0,bossBonus:0,total:0,streak:0,days:new Set()};
 
-  const {month, year, days:DAYS=31, capTarget=16, vcTarget=20, minWorkouts=12} = groupData;
+  const cfg = _cfg();
+  const {month, year, days:DAYS=31, capTarget=16, vcTarget=20, minWorkouts=12} = cfg;
+  const rolesEnabled = cfg.rolesEnabled !== false; // default ON if undefined
+
   const logs = allLogs.filter(l=>l.player===playerName);
   const days = new Set(logs.map(l=>l.day));
   const wo = days.size;
@@ -43,10 +58,9 @@ function score(playerName){
   });
 
   // ── TEAM STREAK BONUS (cumulative +1/+2/+3, only players who logged that day) ──
-  // Threshold = 60% of team size rounded up (scales with any team size)
-  const teamMembers = (groupData.players||[]).filter(x=>x.team===p.team);
+  const teamMembers = roster.filter(x=>x.team===p.team);
   const teamThreshold = Math.ceil(teamMembers.length * 0.6);
-  const teamLogs = allLogs.filter(l=>(groupData.players||[]).find(x=>x.name===l.player&&x.team===p.team));
+  const teamLogs = allLogs.filter(l=>roster.find(x=>x.name===l.player&&x.team===p.team));
   const dc = {};
   teamLogs.forEach(l=>{ if(!dc[l.day]) dc[l.day]=new Set(); dc[l.day].add(l.player); });
   let tb=0, teamStreak=0;
@@ -61,10 +75,11 @@ function score(playerName){
   }
 
   // ── ROLE BONUS (applied only on last day or after month end) ──
+  // Gated by rolesEnabled — if a season has roles disabled, no role bonus/penalty.
   const isEnd = (today.getMonth()+1>month && today.getFullYear()>=year) ||
                 (today.getMonth()+1===month && today.getFullYear()===year && today.getDate()===DAYS);
   let rb = 0;
-  if(isEnd){
+  if(isEnd && rolesEnabled){
     if(p.role==='Captain') rb = wo>=capTarget ? 10 : -10;
     else if(p.role==='Vice Captain') rb = wo>=vcTarget ? 15 : -10;
   }
@@ -93,7 +108,8 @@ function score(playerName){
 }
 
 function teamTotal(team){
-  const players = (groupData.players||[]).filter(p=>p.team===team);
+  const roster = _roster();
+  const players = roster.filter(p=>p.team===team);
   if(players.length===0) return 0;
   const sum = players.reduce((s,p)=>s+score(p.name).total, 0);
   return Math.round(sum/players.length); // average for fair cross-team comparison

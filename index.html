@@ -322,10 +322,19 @@ async function verifyCode(){
     if(!snap.exists){ err.classList.remove('hidden'); return; }
     groupData = snap.data();
     groupCode = code;
-    document.getElementById('ob-s2-group').textContent = `${groupData.name} · ${groupData.players?.length||0} members`;
-    buildPlayerPicker(groupData.players||[]);
+
+    // Load the active season so onboarding can show team/role
+    const sid = groupData.currentSeasonId;
+    if(!sid){ err.textContent = 'Group has no active season. Contact admin.'; err.classList.remove('hidden'); return; }
+    const sSnap = await db.collection('groups').doc(code).collection('seasons').doc(sid).get();
+    if(!sSnap.exists){ err.textContent = 'Active season missing. Contact admin.'; err.classList.remove('hidden'); return; }
+    season = sSnap.data();
+    seasonId = sid;
+
+    document.getElementById('ob-s2-group').textContent = `${groupData.name} · ${season.roster?.length||0} members · ${season.month}/${season.year}`;
+    buildPlayerPicker(season.roster||[]);
     showObStep(2);
-  } catch(e){ err.classList.remove('hidden'); }
+  } catch(e){ console.error(e); err.textContent = 'Could not load group.'; err.classList.remove('hidden'); }
 }
 
 function buildPlayerPicker(players){
@@ -338,7 +347,7 @@ function buildPlayerPicker(players){
 }
 
 function choosePlayer(name){
-  const p = groupData.players.find(x=>x.name===name);
+  const p = (season.roster||[]).find(x=>x.name===name);
   me = p;
   localStorage.setItem('forge_session', JSON.stringify({code:groupCode, player:p}));
   launchApp();
@@ -349,19 +358,25 @@ async function registerAndJoin(){
   const name = nameInput.value.trim();
   if(!name){ alert('Please enter a name!'); return; }
   const formattedName = name.split(' ').map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
-  const existing = (groupData.players||[]).find(p=>p.name.toLowerCase()===formattedName.toLowerCase());
+  const existing = (season.roster||[]).find(p=>p.name.toLowerCase()===formattedName.toLowerCase());
   if(existing){ alert('This name is already registered. Select it from the grid below instead.'); return; }
   const teams = ['A','B','C'];
-  const assignedTeam = teams[(groupData.players||[]).length % 3];
+  const assignedTeam = teams[(season.roster||[]).length % 3];
   const newPlayerObj = { name:formattedName, role:'Player', team:assignedTeam };
-  if(!groupData.players) groupData.players = [];
-  groupData.players.push(newPlayerObj);
+
+  // Update both: group.players (canonical roster of names) and season.roster (this month's team/role)
+  const newGroupPlayers = [...(groupData.players||[]), {name:formattedName}];
+  const newSeasonRoster = [...(season.roster||[]), newPlayerObj];
+
   try {
-    await db.collection('groups').doc(groupCode).update({ players: groupData.players });
+    await db.collection('groups').doc(groupCode).update({ players: newGroupPlayers });
+    await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).update({ roster: newSeasonRoster });
+    groupData.players = newGroupPlayers;
+    season.roster = newSeasonRoster;
     me = newPlayerObj;
     localStorage.setItem('forge_session', JSON.stringify({code:groupCode, player:newPlayerObj}));
     launchApp();
-  } catch(e){ alert('Error registering. Check connection.'); }
+  } catch(e){ console.error(e); alert('Error registering. Check connection.'); }
 }
 
 function promptSwitch(){
@@ -373,20 +388,26 @@ function promptSwitch(){
 
 // ── LOAD GROUP ────────────────────────────────────────────────────────────
 async function loadGroup(code, fromCache){
-  if(!fromCache){
-    const snap = await db.collection('groups').doc(code).get();
-    if(!snap.exists){ localStorage.removeItem('forge_session'); location.reload(); return; }
-    groupData = snap.data();
-  } else {
-    db.collection('groups').doc(code).get().then(snap=>{
-      if(snap.exists){
-        groupData = snap.data();
-        const fresh = groupData.players?.find(p=>p.name===me.name);
-        if(fresh){ me = fresh; document.getElementById('navAv').textContent=me.name[0]; }
-        refresh();
-      }
-    });
+  // Always load group + active season fresh from Firestore.
+  // The fromCache flag means "we have a localStorage session, render immediately
+  // while we fetch", but we still must read the season before launching.
+  const gSnap = await db.collection('groups').doc(code).get();
+  if(!gSnap.exists){ localStorage.removeItem('forge_session'); location.reload(); return; }
+  groupData = gSnap.data();
+
+  const sid = groupData.currentSeasonId;
+  if(!sid){ alert('This group has no active season.'); localStorage.removeItem('forge_session'); location.reload(); return; }
+  const sSnap = await db.collection('groups').doc(code).collection('seasons').doc(sid).get();
+  if(!sSnap.exists){ alert('Active season missing.'); localStorage.removeItem('forge_session'); location.reload(); return; }
+  season = sSnap.data();
+  seasonId = sid;
+
+  // Refresh `me` against the freshly loaded season roster (team/role may have changed)
+  if(me){
+    const fresh = (season.roster||[]).find(p=>p.name===me.name);
+    if(fresh) me = fresh;
   }
+
   launchApp();
 }
 
@@ -396,7 +417,7 @@ function launchApp(){
   document.getElementById('navNm').textContent = me.name;
   const sel = document.getElementById('aPlayer');
   sel.innerHTML = '<option value="">Select player</option>';
-  (groupData.players||[]).forEach(p=>{
+  (season.roster||[]).forEach(p=>{
     const o = document.createElement('option');
     o.value=p.name; o.textContent=p.name; sel.appendChild(o);
   });
@@ -409,11 +430,17 @@ function launchApp(){
 function subscribe(){
   unsub.forEach(fn=>fn());
   unsub = [];
-  const {month, year} = groupData;
+  const {month, year} = season;
+
   unsub.push(db.collection('logs').where('groupCode','==',groupCode).where('month','==',month).where('year','==',year).onSnapshot(s=>{ allLogs=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }));
   unsub.push(db.collection('bonuses_30day').where('groupCode','==',groupCode).where('month','==',month).where('year','==',year).onSnapshot(s=>{ bonus30=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }));
   unsub.push(db.collection('flags').where('groupCode','==',groupCode).where('month','==',month).where('year','==',year).onSnapshot(s=>{ flags=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); }));
-  unsub.push(db.collection('twists').where('groupCode','==',groupCode).onSnapshot(s=>{ activeTwists={}; s.docs.forEach(d=>{ activeTwists[d.id.replace(groupCode+'_','')]=d.data(); }); renderTwistToggles(); refresh(); }));
+
+  // Twists now live under the season as a subcollection
+  unsub.push(
+    db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('twists')
+      .onSnapshot(s=>{ activeTwists={}; s.docs.forEach(d=>{ activeTwists[d.id]=d.data(); }); renderTwistToggles(); refresh(); })
+  );
 }
 
 function refresh(){ renderHome(); renderLB(); renderFeed(); renderFlagQueue(); }
@@ -461,7 +488,7 @@ function renderHome(){
     <div class="sc"><div class="sv">${sc.total}</div><div class="sl">POINTS</div></div>`;
 
   // Role bar
-  const {capTarget=16,vcTarget=20,minWorkouts=12,days:DAYS=31,month,year}=groupData;
+  const {capTarget=16,vcTarget=20,minWorkouts=12,days:DAYS=31,month,year}=season;
   let rHTML='';
   if(pl.role!=='Player'){
     const tgt=pl.role==='Captain'?capTarget:vcTarget;
@@ -589,7 +616,7 @@ async function submitLog(){
   const btn=document.getElementById('subBtn');
   btn.disabled=true; btn.textContent='Saving...';
   try{
-    await db.collection('logs').add({groupCode,player:me.name,team:me.team,role:me.role,workouts:selW,day:selDay,month:groupData.month,year:groupData.year,timestamp:firebase.firestore.FieldValue.serverTimestamp()});
+    await db.collection('logs').add({groupCode,player:me.name,team:me.team,role:me.role,workouts:selW,day:selDay,month:season.month,year:season.year,timestamp:firebase.firestore.FieldValue.serverTimestamp()});
     const sc=score(me.name);
     const myDays=[...allLogs.filter(l=>l.player===me.name).map(l=>l.day)].sort((a,b)=>a-b);
     const lastDay=myDays.length>=2?myDays[myDays.length-2]:null;
@@ -728,7 +755,7 @@ function renderFeed(){
 async function deleteLog(id){ if(!confirm('Delete this workout entry?')) return; await db.collection('logs').doc(id).delete(); }
 async function flagLog(logId,player){
   if(!confirm(`Flag ${player}'s workout as suspicious?`)) return;
-  await db.collection('flags').add({groupCode,logId,player,flaggedBy:me.name,month:groupData.month,year:groupData.year,timestamp:firebase.firestore.FieldValue.serverTimestamp()});
+  await db.collection('flags').add({groupCode,logId,player,flaggedBy:me.name,month:season.month,year:season.year,timestamp:firebase.firestore.FieldValue.serverTimestamp()});
 }
 
 // ── FLAG QUEUE ────────────────────────────────────────────────────────────
@@ -810,14 +837,16 @@ async function toggleTwist(id,enable){
   const twist=TWIST_LIBRARY.find(t=>t.id===id);
   const data={enabled:enable};
   if(enable&&twist.configKey) data[twist.configKey]=activeTwists[id]?.[twist.configKey]||twist.configDefault||'';
-  await db.collection('twists').doc(`${groupCode}_${id}`).set({groupCode,...data});
+  await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('twists').doc(id).set(data);
 }
-async function saveTwistConfig(id,key,value){ await db.collection('twists').doc(`${groupCode}_${id}`).update({[key]:value}); }
+async function saveTwistConfig(id,key,value){
+  await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('twists').doc(id).update({[key]:value});
+}
 async function award30(){
   const p=document.getElementById('aPlayer').value;
   if(!p){alert('Select player');return;}
   if(bonus30.find(b=>b.player===p)){alert('Already awarded');return;}
-  await db.collection('bonuses_30day').add({groupCode,player:p,month:groupData.month,year:groupData.year});
+  await db.collection('bonuses_30day').add({groupCode,player:p,month:season.month,year:season.year});
   alert(`✅ +50 pts awarded to ${p}`);
 }
 
@@ -857,7 +886,30 @@ async function createGroup(){
   const vcTarget=parseInt(document.getElementById('newGroupVCTarget').value);
   const minWorkouts=parseInt(document.getElementById('newGroupMinWO').value);
   const code=Math.random().toString(36).substring(2,8).toUpperCase();
-  await db.collection('groups').doc(code).set({name,month,year,days,capTarget,vcTarget,minWorkouts,players:[],createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+  const sid=seasonIdOf(month, year);
+  const now=firebase.firestore.FieldValue.serverTimestamp();
+
+  // Write group + first season in a batch so they always exist together
+  const batch = db.batch();
+  const groupRef = db.collection('groups').doc(code);
+  batch.set(groupRef, {
+    name,
+    players: [],            // canonical roster of names; populated as players register
+    currentSeasonId: sid,
+    createdAt: now
+  });
+  const seasonRef = groupRef.collection('seasons').doc(sid);
+  batch.set(seasonRef, {
+    month, year, days,
+    capTarget, vcTarget, minWorkouts,
+    rolesEnabled: true,     // default ON; can be toggled per season later
+    roster: [],             // populated as players register
+    status: 'active',
+    startedAt: now,
+    endedAt: null
+  });
+  await batch.commit();
+
   const res=document.getElementById('newGroupResult');
   res.className='warn-box warn-green';
   res.innerHTML=`✅ Group created! Code: <strong style="font-size:20px;letter-spacing:3px">${code}</strong><br>Share this code with your group members.`;
