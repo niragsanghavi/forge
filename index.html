@@ -571,7 +571,7 @@ function renderHome(){
   const team=pl.team;
   const teamMembers=(season.roster||[]).filter(p=>p.team===team);
   const threshold=Math.ceil(teamMembers.length*(season.teamStreakThreshold??0.6));
-  const teamLogs=allLogs.filter(l=>(season.roster||[]).find(p=>p.name===l.player&&p.team===team));;
+  const teamLogs=allLogs.filter(l=>(season.roster||[]).find(p=>p.name===l.player&&p.team===team));
   const dc={};
   teamLogs.forEach(l=>{ if(!dc[l.day]) dc[l.day]=new Set(); dc[l.day].add(l.player); });
   const bonusDays=Object.entries(dc).filter(([d,ps])=>ps.size>=threshold).map(([d])=>+d).sort((a,b)=>a-b);
@@ -1097,16 +1097,6 @@ async function createGroup(){
     numTeams,                          // 2 or 3 — how many teams this season uses
     teamStreakThreshold: thresholdPct/100,  // fraction (0.6 = 60%)
     rolesEnabled,                      // Captain/VC on or off for this season
-    roster: [],             // populated as players register
-    status: 'active',
-    startedAt: now,
-    endedAt: null
-  });
-  const seasonRef = groupRef.collection('seasons').doc(sid);
-  batch.set(seasonRef, {
-    month, year, days,
-    capTarget, vcTarget, minWorkouts,
-    rolesEnabled: true,     // default ON; can be toggled per season later
     roster: [],             // populated as players register
     status: 'active',
     startedAt: now,
