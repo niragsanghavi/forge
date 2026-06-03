@@ -1012,6 +1012,7 @@ function checkRolloverNudges(groups){
     const seasonEnded = (sYear<curYear) || (sYear===curYear && sMonth<curMonth);
     if(seasonEnded) due.push(g);
   });
+
   if(due.length===0){ el.innerHTML=''; return; }
   el.innerHTML=`<div class="card" style="border:1px solid var(--orange);background:var(--orange-l)">
     <div style="font-size:13px;font-weight:700;color:var(--orange);margin-bottom:6px">⏰ Season rollover due</div>
