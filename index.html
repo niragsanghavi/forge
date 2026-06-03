@@ -40,7 +40,10 @@
 <!-- ══ MAIN APP ══ -->
 <div class="screen" id="screen-app">
   <nav class="nav">
-    <div class="nav-logo">FORGE</div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button id="backToSuperBtn" class="btn btn-surface btn-sm hidden" style="margin:0" onclick="backToSuper()">← Super</button>
+      <div class="nav-logo">FORGE</div>
+    </div>
     <div class="nav-user" onclick="promptSwitch()">
       <div class="nav-av" id="navAv"></div>
       <span class="nav-nm" id="navNm"></span>
@@ -195,6 +198,17 @@
   <div style="padding:16px;max-width:500px;margin:0 auto">
     <div class="shdr">All Groups</div>
     <div id="superGroupList"></div>
+
+    <div style="margin-top:24px">
+      <div class="shdr">Data Export</div>
+      <div class="card" style="border:1px solid var(--purple)">
+        <div class="card-title" style="color:var(--purple)">Developer Tools</div>
+        <div class="tmuted" style="margin-bottom:12px">Download a full backup of all Forge data across every group and season.</div>
+        <button class="btn btn-purple" onclick="exportAllData()">📥 Export EVERYTHING (.json)</button>
+        <div id="exportStatus" class="tmuted" style="text-align:center;margin-top:8px"></div>
+      </div>
+    </div>
+
     <div style="margin-top:24px">
       <div class="shdr">Create New Group</div>
       <div class="card">
@@ -879,7 +893,14 @@ async function superViewGroup(code){
   season=sSnap.data();
   seasonId=sid;
   me=(season.roster&&season.roster[0])||{name:'Admin',team:'A',role:'Player'};
+  window.fromSuper=true;     // mark that we entered the app via super admin
   launchApp();
+}
+
+function backToSuper(){
+  window.fromSuper=false;
+  showScreen('super');
+  loadSuperAdmin();
 }
 // ── START NEW SEASON ──────────────────────────────────────────────────────
 // Archives the group's current active season and creates the next one,
@@ -947,7 +968,84 @@ async function startNewSeason(code){
     loadSuperAdmin();
   } catch(e){ console.error(e); alert('❌ Rollover failed: '+e.message); }
 }
-function exitSuper(){ showScreen('super'); }
+function exitSuper(){
+  // Leave super admin entirely. If a normal player session exists on this
+  // device, the onboarding boot logic will pick it up on reload; otherwise
+  // the user lands on the group-code entry screen.
+  const saved = localStorage.getItem('forge_session');
+  if(saved){
+    location.reload();           // boot logic resumes the player's own session
+  } else {
+    showScreen('onboard');
+    showObStep(1);
+  }
+}
+// ── DATA EXPORT (super admin) ─────────────────────────────────────────────
+// Exports a complete snapshot of all Forge data across every group and season.
+// Reads fresh from Firestore (not from in-memory state, which only holds the
+// currently-loaded group/season). Use this for backups and offline analysis.
+async function exportAllData(){
+  const status = document.getElementById('exportStatus');
+  status.textContent = 'Gathering data… this may take a few seconds.';
+  try {
+    const snapshot = {
+      exportedAt: new Date().toISOString(),
+      schemaVersion: 'forge-v1',
+      groups: [],
+      logs: [],
+      bonuses_30day: [],
+      flags: []
+    };
+
+    // 1. All groups + their seasons + each season's twists
+    const groupsSnap = await db.collection('groups').get();
+    for(const gDoc of groupsSnap.docs){
+      const group = { code: gDoc.id, ...gDoc.data(), seasons: [] };
+      const seasonsSnap = await db.collection('groups').doc(gDoc.id).collection('seasons').get();
+      for(const sDoc of seasonsSnap.docs){
+        const season = { id: sDoc.id, ...sDoc.data(), twists: {} };
+        const twistsSnap = await db.collection('groups').doc(gDoc.id).collection('seasons').doc(sDoc.id).collection('twists').get();
+        twistsSnap.docs.forEach(t => { season.twists[t.id] = t.data(); });
+        group.seasons.push(season);
+      }
+      snapshot.groups.push(group);
+    }
+
+    // 2. Top-level collections (scoped by groupCode + month + year on each doc)
+    const [logsSnap, bonusSnap, flagsSnap] = await Promise.all([
+      db.collection('logs').get(),
+      db.collection('bonuses_30day').get(),
+      db.collection('flags').get()
+    ]);
+    snapshot.logs = logsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    snapshot.bonuses_30day = bonusSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    snapshot.flags = flagsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    downloadJSON(snapshot, `forge_full_backup_${todayStamp()}.json`);
+    status.textContent = `✅ Exported ${snapshot.groups.length} groups, ${snapshot.logs.length} logs.`;
+  } catch(e){
+    console.error(e);
+    status.textContent = '❌ Export failed: ' + e.message;
+  }
+}
+
+// Helper: trigger a browser download of a JS object as pretty-printed JSON.
+function downloadJSON(obj, filename){
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url); // clean up the object URL
+}
+
+// Helper: YYYY-MM-DD stamp for filenames.
+function todayStamp(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 async function createGroup(){
   const name=document.getElementById('newGroupName').value.trim();
   if(!name){alert('Enter a group name');return;}
