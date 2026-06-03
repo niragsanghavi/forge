@@ -199,8 +199,41 @@
     <button class="btn btn-surface btn-sm" onclick="exitSuper()" style="margin:0">Exit</button>
   </nav>
   <div style="padding:16px;max-width:500px;margin:0 auto">
-    <div class="shdr">All Groups</div>
+    <div class="shdr">Overview</div>
+    <div id="superDashboard"></div>
+    <div id="rolloverNudge" style="margin-top:12px"></div>
+
+    <div class="shdr" style="margin-top:20px">All Groups</div>
     <div id="superGroupList"></div>
+
+    <!-- Edit group settings (hidden until ⚙ Manage) -->
+    <div id="editGroupModal" class="hidden" style="margin-top:16px">
+      <div class="card" style="border:1px solid var(--gold)">
+        <div class="card-title" style="color:var(--gold)">Manage <span id="editGroupName"></span></div>
+        <div class="tmuted" style="margin-bottom:12px">Edits apply to the current active season only.</div>
+        <label>Days in month</label>
+        <input id="editDays" type="number" min="28" max="31">
+        <label>Captain workout target</label>
+        <input id="editCapTarget" type="number">
+        <label>Vice Captain workout target</label>
+        <input id="editVCTarget" type="number">
+        <label>Minimum workouts before penalty</label>
+        <input id="editMinWO" type="number">
+        <label>Number of teams (2 or 3)</label>
+        <input id="editNumTeams" type="number" min="2" max="3">
+        <label>Team streak threshold (% of team needed for bonus)</label>
+        <input id="editThreshold" type="number" min="30" max="100">
+        <label style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <input type="checkbox" id="editRoles" style="width:auto;margin:0">
+          <span>Enable Captains / Vice Captains</span>
+        </label>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="closeEditGroup()">Cancel</button>
+          <button class="btn btn-gold btn-sm" style="flex:1;margin:0" onclick="saveEditGroup()">Save Changes</button>
+        </div>
+        <div id="editGroupStatus" class="tmuted" style="text-align:center;margin-top:8px"></div>
+      </div>
+    </div>
 
     <div style="margin-top:24px">
       <div class="shdr">Data Export</div>
@@ -382,9 +415,11 @@ async function registerAndJoin(){
   const nameInput = document.getElementById('newPlayerNameInput');
   const name = nameInput.value.trim();
   if(!name){ alert('Please enter a name!'); return; }
-  const formattedName = name.split(' ').map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
+  // Standardise: first letter of each word upper, rest lower ("RISHIL" -> "Rishil")
+  const formattedName = name.split(' ').filter(Boolean).map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
+  // Name must be unique within this group's roster (case-insensitive)
   const existing = (season.roster||[]).find(p=>p.name.toLowerCase()===formattedName.toLowerCase());
-  if(existing){ alert('This name is already registered. Select it from the grid below instead.'); return; }
+  if(existing){ alert(`The name "${formattedName}" is already taken in this group. Please use a different name (e.g. add your surname or initial).`); return; }
   const numTeams = season.numTeams === 2 ? 2 : 3;
   const teams = numTeams === 2 ? ['A','B'] : ['A','B','C'];
   const assignedTeam = teams[(season.roster||[]).length % teams.length];
@@ -882,9 +917,17 @@ async function award30(){
 }
 
 // ── SUPER ADMIN ───────────────────────────────────────────────────────────
+// ── SUPER ADMIN ───────────────────────────────────────────────────────────
 async function loadSuperAdmin(){
   const snap=await db.collection('groups').get();
   const groups=snap.docs.map(d=>({code:d.id,...d.data()}));
+
+  // ── Dashboard strip: cross-group totals, fetched on load ──
+  renderSuperDashboard(groups);
+
+  // ── Rollover nudge: if any active season's month has ended/is last day ──
+  checkRolloverNudges(groups);
+
   document.getElementById('superGroupList').innerHTML=groups.length===0
     ?'<div class="tmuted">No groups yet</div>'
     :groups.map(g=>`
@@ -896,8 +939,85 @@ async function loadSuperAdmin(){
           </div>
           <div style="font-size:20px;font-weight:800;letter-spacing:3px;color:var(--gold)">${g.code}</div>
         </div>
-        <button class="btn btn-surface btn-sm" style="margin-top:10px" onclick="event.stopPropagation();startNewSeason('${g.code}')">↻ Start New Season</button>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="event.stopPropagation();openEditGroup('${g.code}')">⚙ Manage</button>
+          <button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="event.stopPropagation();startNewSeason('${g.code}')">↻ New Season</button>
+        </div>
       </div>`).join('');
+}
+
+// Cross-group totals. Reads logs once (on load), not a live listener.
+async function renderSuperDashboard(groups){
+  const el=document.getElementById('superDashboard');
+  if(!el) return;
+  el.innerHTML='<div class="tmuted">Loading stats…</div>';
+  try{
+    const totalGroups=groups.length;
+    const totalPlayers=groups.reduce((s,g)=>s+(g.players?.length||0),0);
+
+    // Logs logged today (by calendar date of the timestamp), across all groups
+    const now=new Date();
+    const startOfDay=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    const logsSnap=await db.collection('logs').get();
+    let loggedToday=0;
+    const perGroupToday={};
+    logsSnap.docs.forEach(d=>{
+      const l=d.data();
+      const ts=l.timestamp?.seconds?new Date(l.timestamp.seconds*1000):null;
+      if(ts && ts>=startOfDay){
+        loggedToday++;
+        perGroupToday[l.groupCode]=(perGroupToday[l.groupCode]||0)+1;
+      }
+    });
+    const topEntry=Object.entries(perGroupToday).sort((a,b)=>b[1]-a[1])[0];
+    const topGroupName=topEntry ? (groups.find(g=>g.code===topEntry[0])?.name||topEntry[0]) : '—';
+
+    el.innerHTML=`
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="card" style="margin:0;text-align:center;padding:12px">
+          <div style="font-size:26px;font-weight:900;color:var(--gold)">${totalGroups}</div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Groups</div>
+        </div>
+        <div class="card" style="margin:0;text-align:center;padding:12px">
+          <div style="font-size:26px;font-weight:900;color:var(--gold)">${totalPlayers}</div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Total players</div>
+        </div>
+        <div class="card" style="margin:0;text-align:center;padding:12px">
+          <div style="font-size:26px;font-weight:900;color:var(--green)">${loggedToday}</div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Logs today</div>
+        </div>
+        <div class="card" style="margin:0;text-align:center;padding:12px">
+          <div style="font-size:15px;font-weight:800;color:var(--text);margin-top:4px">${topGroupName}</div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Most active today</div>
+        </div>
+      </div>`;
+  }catch(e){ console.error(e); el.innerHTML='<div class="tmuted">Could not load stats.</div>'; }
+}
+
+// If an active season's month is over (or it's the last day), nudge to roll over.
+function checkRolloverNudges(groups){
+  const el=document.getElementById('rolloverNudge');
+  if(!el) return;
+  const now=new Date();
+  const curMonth=now.getMonth()+1, curYear=now.getFullYear();
+  const due=[];
+  groups.forEach(g=>{
+    // We only have the group doc here; use currentSeasonId "YYYY-MM" to read the month.
+    const sid=g.currentSeasonId;
+    if(!sid) return;
+    const [yStr,mStr]=sid.split('-');
+    const sYear=parseInt(yStr), sMonth=parseInt(mStr);
+    if(!sYear||!sMonth) return;
+    // Due if the season's month/year is now in the past relative to today.
+    const seasonEnded = (sYear<curYear) || (sYear===curYear && sMonth<curMonth);
+    if(seasonEnded) due.push(g);
+  });
+  if(due.length===0){ el.innerHTML=''; return; }
+  el.innerHTML=`<div class="card" style="border:1px solid var(--orange);background:var(--orange-l)">
+    <div style="font-size:13px;font-weight:700;color:var(--orange);margin-bottom:6px">⏰ Season rollover due</div>
+    <div class="tmuted" style="margin-bottom:10px">These groups are still on a past month. Roll them into the current month when ready (teams carry forward; you confirm each step):</div>
+    ${due.map(g=>`<button class="btn btn-surface btn-sm" style="margin:0 6px 6px 0" onclick="startNewSeason('${g.code}')">↻ Roll over ${g.name}</button>`).join('')}
+  </div>`;
 }
 async function superViewGroup(code){
   groupCode=code;
@@ -918,6 +1038,86 @@ function backToSuper(){
   window.fromSuper=false;
   showScreen('super');
   loadSuperAdmin();
+}
+// ── EDIT GROUP SETTINGS (super admin) ─────────────────────────────────────
+// Loads the group's ACTIVE season config into the edit form and writes changes
+// back to that season doc. Uses ?? defaults so pre-existing seasons that lack
+// numTeams / teamStreakThreshold still populate sensibly.
+window._editGroupCode=null;
+window._editSeasonId=null;
+window._editRoster=null;
+
+async function openEditGroup(code){
+  try{
+    const gSnap=await db.collection('groups').doc(code).get();
+    if(!gSnap.exists){ alert('Group not found.'); return; }
+    const g=gSnap.data();
+    const sid=g.currentSeasonId;
+    if(!sid){ alert('Group has no active season.'); return; }
+    const sSnap=await db.collection('groups').doc(code).collection('seasons').doc(sid).get();
+    if(!sSnap.exists){ alert('Active season missing.'); return; }
+    const s=sSnap.data();
+
+    window._editGroupCode=code;
+    window._editSeasonId=sid;
+    window._editRoster=s.roster||[];
+
+    document.getElementById('editGroupName').textContent=`${g.name} (${sid})`;
+    document.getElementById('editDays').value=s.days ?? 30;
+    document.getElementById('editCapTarget').value=s.capTarget ?? 16;
+    document.getElementById('editVCTarget').value=s.vcTarget ?? 20;
+    document.getElementById('editMinWO').value=s.minWorkouts ?? 12;
+    document.getElementById('editNumTeams').value=s.numTeams ?? 3;
+    document.getElementById('editThreshold').value=Math.round((s.teamStreakThreshold ?? 0.6)*100);
+    document.getElementById('editRoles').checked=(s.rolesEnabled!==false);
+
+    document.getElementById('editGroupStatus').textContent='';
+    document.getElementById('editGroupModal').classList.remove('hidden');
+    document.getElementById('editGroupModal').scrollIntoView({behavior:'smooth',block:'center'});
+  }catch(e){ console.error(e); alert('Could not open settings: '+e.message); }
+}
+
+function closeEditGroup(){
+  document.getElementById('editGroupModal').classList.add('hidden');
+  window._editGroupCode=null; window._editSeasonId=null; window._editRoster=null;
+}
+
+async function saveEditGroup(){
+  const code=window._editGroupCode, sid=window._editSeasonId;
+  if(!code||!sid){ return; }
+  const status=document.getElementById('editGroupStatus');
+
+  const days=parseInt(document.getElementById('editDays').value)||30;
+  const capTarget=parseInt(document.getElementById('editCapTarget').value)||16;
+  const vcTarget=parseInt(document.getElementById('editVCTarget').value)||20;
+  const minWorkouts=parseInt(document.getElementById('editMinWO').value)||12;
+  const numTeams=Math.min(3,Math.max(2,parseInt(document.getElementById('editNumTeams').value)||3));
+  const thresholdPct=Math.min(100,Math.max(30,parseInt(document.getElementById('editThreshold').value)||60));
+  const rolesEnabled=document.getElementById('editRoles').checked;
+
+  // ── Guard: reducing team count while players sit on a vanishing team ──
+  if(numTeams===2){
+    const orphans=(window._editRoster||[]).filter(p=>p.team==='C').map(p=>p.name);
+    if(orphans.length>0){
+      const ok=confirm(`⚠️ Reducing to 2 teams, but these players are on Team C:\n\n${orphans.join(', ')}\n\nThey will stay on Team C in the data (not lost), but the app will only offer Teams A and B. You'll need to reassign them via that group's Admin → Team & Role Assignment.\n\nProceed anyway?`);
+      if(!ok){ status.textContent='Cancelled — no changes saved.'; return; }
+    }
+  }
+
+  status.textContent='Saving…';
+  try{
+    await db.collection('groups').doc(code).collection('seasons').doc(sid).update({
+      days, capTarget, vcTarget, minWorkouts, numTeams,
+      teamStreakThreshold: thresholdPct/100,
+      rolesEnabled
+    });
+    // If we're editing the group we're currently viewing in-app, refresh local state.
+    if(window.season && window.seasonId===sid && window.groupCode===code){
+      Object.assign(window.season,{days,capTarget,vcTarget,minWorkouts,numTeams,teamStreakThreshold:thresholdPct/100,rolesEnabled});
+    }
+    status.textContent='✅ Saved.';
+    setTimeout(()=>{ closeEditGroup(); loadSuperAdmin(); }, 700);
+  }catch(e){ console.error(e); status.textContent='❌ Save failed: '+e.message; }
 }
 // ── START NEW SEASON ──────────────────────────────────────────────────────
 // Archives the group's current active season and creates the next one,
