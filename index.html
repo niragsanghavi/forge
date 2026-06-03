@@ -279,6 +279,7 @@
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="src/config/firebase.js"></script>
 <script src="src/state/appState.js"></script>
 <script src="src/services/scoringEngine.js"></script>
@@ -342,22 +343,34 @@ function getRandomComeback(){ return COMEBACK_MSGS[Math.floor(Math.random()*COME
 
 // ── BOOT ──────────────────────────────────────────────────────────────────
 window.onload = () => {
-  setTimeout(() => {
-    if(location.search.includes('superadmin')){
-      const pin = prompt('Super admin PIN:');
-      if(pin === SUPER_PIN){ showScreen('super'); loadSuperAdmin(); return; }
-    }
-    const saved = localStorage.getItem('forge_session');
-    if(saved){
-      const s = JSON.parse(saved);
-      groupCode = s.code;
-      me = s.player;
-      loadGroup(groupCode, true);
-    } else {
-      showScreen('onboard');
-    }
-  }, 100);
+  // Establish the anonymous auth session FIRST, before any Firestore read.
+  // Everything downstream (loadGroup, loadSuperAdmin, verifyCode) issues
+  // Firestore queries, so they must not run until we have a UID.
+  ensureAuth().then(uid => {
+    window.currentUid = uid;   // available app-wide for Stage 2+ (PIN binding)
+    bootApp();
+  }).catch(err => {
+    // If auth fails, the app can't talk to Firestore. Show a clear message
+    // rather than a silent blank screen.
+    document.body.innerHTML = '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#888">Could not connect. Please refresh.<br><br><span style="font-size:12px">'+(err?.message||'')+'</span></div>';
+  });
 };
+
+function bootApp(){
+  if(location.search.includes('superadmin')){
+    const pin = prompt('Super admin PIN:');
+    if(pin === SUPER_PIN){ showScreen('super'); loadSuperAdmin(); return; }
+  }
+  const saved = localStorage.getItem('forge_session');
+  if(saved){
+    const s = JSON.parse(saved);
+    groupCode = s.code;
+    me = s.player;
+    loadGroup(groupCode, true);
+  } else {
+    showScreen('onboard');
+  }
+}
 
 function showScreen(name){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
