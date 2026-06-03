@@ -34,6 +34,14 @@
       <div class="pgrid" id="obgrid"></div>
       <div style="margin-top:12px;font-size:11px;color:var(--muted);text-align:center">We'll remember you on this device</div>
     </div>
+    <div class="ob-step" id="ob-s3">
+      <div class="ob-title">Set your PIN</div>
+      <div class="ob-sub" id="ob-s3-sub">Pick a 4-digit PIN to secure your account. You'll only need it on a new device.</div>
+      <input class="code-input" id="pinInput" type="tel" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+      <input class="code-input" id="pinConfirm" type="tel" inputmode="numeric" maxlength="4" placeholder="confirm" autocomplete="off" oninput="this.value=this.value.replace(/[^0-9]/g,'')" style="margin-top:8px">
+      <div id="pinError" class="warn-box warn-red hidden" style="margin-top:10px"></div>
+      <button class="btn btn-gold" style="margin-top:10px" onclick="submitNewPin()">Set PIN &amp; Continue</button>
+    </div>
   </div>
 </div>
 
@@ -419,10 +427,46 @@ function buildPlayerPicker(players){
 
 function choosePlayer(name){
   const p = (season.roster||[]).find(x=>x.name===name);
+  if(!p){ return; }
+  // Stage 2: if this player has no PIN yet (existing pre-auth user), route them
+  // to set one before entering. Collected, not enforced — no lockout.
+  if(!p.pin){
+    window._pinFlow = { mode:'grace', name:p.name };
+    document.getElementById('ob-s3-sub').textContent = `Welcome back, ${p.name}. Set a 4-digit PIN to secure your account.`;
+    document.getElementById('pinInput').value = '';
+    document.getElementById('pinConfirm').value = '';
+    document.getElementById('pinError').classList.add('hidden');
+    showObStep(3);
+    return;
+  }
   me = p;
   localStorage.setItem('forge_session', JSON.stringify({code:groupCode, player:p}));
   launchApp();
 }
+
+// Stage 2 grace check for users resumed from a saved localStorage session.
+// If their roster record lacks a PIN, send them through the set-PIN step
+// instead of straight into the app. Returns true if it redirected.
+function gracePinCheckOnResume(){
+  if(!me || !season) return false;
+  const fresh = (season.roster||[]).find(p=>p.name===me.name);
+  if(fresh && !fresh.pin){
+    showScreen('onboard');
+    window._pinFlow = { mode:'grace', name:fresh.name };
+    document.getElementById('ob-s3-sub').textContent = `Welcome back, ${fresh.name}. Set a 4-digit PIN to secure your account.`;
+    document.getElementById('pinInput').value = '';
+    document.getElementById('pinConfirm').value = '';
+    document.getElementById('pinError').classList.add('hidden');
+    showObStep(3);
+    return true;
+  }
+  return false;
+}
+
+// PIN flow state: what are we setting a PIN FOR right now?
+//   mode 'register' = brand-new player being created
+//   mode 'grace'    = existing player (no pin yet) setting one for the first time
+window._pinFlow = null;
 
 async function registerAndJoin(){
   const nameInput = document.getElementById('newPlayerNameInput');
@@ -436,21 +480,55 @@ async function registerAndJoin(){
   const numTeams = season.numTeams === 2 ? 2 : 3;
   const teams = numTeams === 2 ? ['A','B'] : ['A','B','C'];
   const assignedTeam = teams[(season.roster||[]).length % teams.length];
-  const newPlayerObj = { name:formattedName, role:'Player', team:assignedTeam };
 
-  // Update both: group.players (canonical roster of names) and season.roster (this month's team/role)
-  const newGroupPlayers = [...(groupData.players||[]), {name:formattedName}];
-  const newSeasonRoster = [...(season.roster||[]), newPlayerObj];
+  // Stage the new player and route to PIN-setting. Nothing is written until the
+  // PIN is set in submitNewPin() — so a half-finished registration leaves no debris.
+  window._pinFlow = { mode:'register', name:formattedName, team:assignedTeam, role:'Player' };
+  document.getElementById('ob-s3-sub').textContent = `Welcome, ${formattedName}. Pick a 4-digit PIN to secure your account.`;
+  document.getElementById('pinInput').value = '';
+  document.getElementById('pinConfirm').value = '';
+  document.getElementById('pinError').classList.add('hidden');
+  showObStep(3);
+}
+
+// Finalizes whichever PIN flow is active (register or grace).
+async function submitNewPin(){
+  const pin = document.getElementById('pinInput').value;
+  const confirm = document.getElementById('pinConfirm').value;
+  const err = document.getElementById('pinError');
+  err.classList.add('hidden');
+  if(!/^\d{4}$/.test(pin)){ err.textContent='PIN must be exactly 4 digits.'; err.classList.remove('hidden'); return; }
+  if(pin !== confirm){ err.textContent='PINs don\'t match. Try again.'; err.classList.remove('hidden'); return; }
+
+  const flow = window._pinFlow;
+  if(!flow){ err.textContent='Something went wrong. Please refresh.'; err.classList.remove('hidden'); return; }
 
   try {
-    await db.collection('groups').doc(groupCode).update({ players: newGroupPlayers });
-    await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).update({ roster: newSeasonRoster });
-    groupData.players = newGroupPlayers;
-    season.roster = newSeasonRoster;
-    me = newPlayerObj;
-    localStorage.setItem('forge_session', JSON.stringify({code:groupCode, player:newPlayerObj}));
+    if(flow.mode === 'register'){
+      const newPlayerObj = { name:flow.name, role:flow.role, team:flow.team, pin, uid:(window.currentUid||null) };
+      const newGroupPlayers = [...(groupData.players||[]), {name:flow.name}];
+      const newSeasonRoster = [...(season.roster||[]), newPlayerObj];
+      await db.collection('groups').doc(groupCode).update({ players: newGroupPlayers });
+      await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).update({ roster: newSeasonRoster });
+      groupData.players = newGroupPlayers;
+      season.roster = newSeasonRoster;
+      me = newPlayerObj;
+      localStorage.setItem('forge_session', JSON.stringify({code:groupCode, player:newPlayerObj}));
+    } else if(flow.mode === 'grace'){
+      // Existing player setting a PIN for the first time. Patch their roster entry.
+      const roster = JSON.parse(JSON.stringify(season.roster||[]));
+      const entry = roster.find(p=>p.name===flow.name);
+      if(!entry){ err.textContent='Could not find your record. Please refresh.'; err.classList.remove('hidden'); return; }
+      entry.pin = pin;
+      entry.uid = (window.currentUid||null);
+      await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).update({ roster });
+      season.roster = roster;
+      me = entry;
+      localStorage.setItem('forge_session', JSON.stringify({code:groupCode, player:entry}));
+    }
+    window._pinFlow = null;
     launchApp();
-  } catch(e){ console.error(e); alert('Error registering. Check connection.'); }
+  } catch(e){ console.error(e); err.textContent='Save failed — check connection.'; err.classList.remove('hidden'); }
 }
 
 function promptSwitch(){
@@ -481,6 +559,10 @@ async function loadGroup(code, fromCache){
     const fresh = (season.roster||[]).find(p=>p.name===me.name);
     if(fresh) me = fresh;
   }
+
+  // Stage 2 grace flow: existing user with no PIN yet → route to set one.
+  // (Collected, not enforced — this never blocks, it just prompts once.)
+  if(gracePinCheckOnResume()) return;
 
   launchApp();
 }
