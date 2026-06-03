@@ -1,4 +1,5 @@
-:root {
+/* ── DARK THEME (default) ── */
+:root, :root[data-theme="dark"] {
   --bg:#0a0a0f;--surface:#13131a;--card:#1a1a24;--border:rgba(255,255,255,0.07);
   --text:#f0f0f5;--muted:#6b7280;--gold:#f59e0b;--gold-l:#1c1507;
   --red:#ef4444;--red-l:#1c0707;--blue:#3b82f6;--blue-l:#070f1c;
@@ -7,8 +8,21 @@
   --A:#ef4444;--Al:#1c0707;--B:#3b82f6;--Bl:#070f1c;--C:#22c55e;--Cl:#071a0d;
   --r:12px;--font:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
 }
+/* ── LIGHT THEME ── */
+:root[data-theme="light"] {
+  --bg:#f5f5f7;--surface:#ffffff;--card:#ffffff;--border:rgba(0,0,0,0.09);
+  --text:#1a1a2e;--muted:#6b7280;--gold:#d97706;--gold-l:#fef3c7;
+  --red:#dc2626;--red-l:#fee2e2;--blue:#2563eb;--blue-l:#dbeafe;
+  --green:#16a34a;--green-l:#dcfce7;--orange:#ea580c;--orange-l:#ffedd5;
+  --purple:#7c3aed;--purple-l:#ede9fe;--pink:#db2777;--pink-l:#fce7f3;
+  --A:#dc2626;--Al:#fee2e2;--B:#2563eb;--Bl:#dbeafe;--C:#16a34a;--Cl:#dcfce7;
+}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh;overflow-x:hidden}
+body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh;overflow-x:hidden;transition:background .25s,color .25s}
+
+/* ── THEME TOGGLE ── */
+.theme-toggle{width:34px;height:34px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;transition:all .15s;flex-shrink:0;padding:0}
+.theme-toggle:active{transform:scale(.92)}
 
 /* ── SCREENS ── */
 .screen{display:none;min-height:100vh}

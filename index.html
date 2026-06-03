@@ -44,9 +44,12 @@
       <button id="backToSuperBtn" class="btn btn-surface btn-sm hidden" style="margin:0" onclick="backToSuper()">← Super</button>
       <div class="nav-logo">FORGE</div>
     </div>
-    <div class="nav-user" onclick="promptSwitch()">
-      <div class="nav-av" id="navAv"></div>
-      <span class="nav-nm" id="navNm"></span>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark">🌙</button>
+      <div class="nav-user" onclick="promptSwitch()">
+        <div class="nav-av" id="navAv"></div>
+        <span class="nav-nm" id="navNm"></span>
+      </div>
     </div>
   </nav>
   <div class="tabs">
@@ -140,7 +143,7 @@
   <div class="page" id="page-admin">
     <div style="padding:8px 0 4px;font-size:20px;font-weight:800">Admin</div>
     <div class="tmuted" style="margin-bottom:16px;font-size:12px">Group admin controls</div>
-    <div class="card">
+    <div class="card" id="roleGuideCard">
       <div class="card-title">Role Guide</div>
       <div style="padding:10px 0;border-bottom:1px solid var(--border)">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
@@ -226,7 +229,15 @@
         <input id="newGroupVCTarget" type="number" value="20">
         <label>Minimum workouts before penalty</label>
         <input id="newGroupMinWO" type="number" value="12">
-        <button class="btn btn-gold" onclick="createGroup()">Create Group + Generate Code</button>
+        <label>Number of teams (2 or 3)</label>
+        <input id="newGroupNumTeams" type="number" min="2" max="3" value="3">
+        <label>Team streak threshold (% of team needed for bonus)</label>
+        <input id="newGroupThreshold" type="number" min="30" max="100" value="60">
+        <label style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <input type="checkbox" id="newGroupRoles" checked style="width:auto;margin:0">
+          <span>Enable Captains / Vice Captains</span>
+        </label>
+        <button class="btn btn-gold" style="margin-top:10px" onclick="createGroup()">Create Group + Generate Code</button>
         <div id="newGroupResult" class="hidden"></div>
       </div>
     </div>
@@ -374,8 +385,9 @@ async function registerAndJoin(){
   const formattedName = name.split(' ').map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
   const existing = (season.roster||[]).find(p=>p.name.toLowerCase()===formattedName.toLowerCase());
   if(existing){ alert('This name is already registered. Select it from the grid below instead.'); return; }
-  const teams = ['A','B','C'];
-  const assignedTeam = teams[(season.roster||[]).length % 3];
+  const numTeams = season.numTeams === 2 ? 2 : 3;
+  const teams = numTeams === 2 ? ['A','B'] : ['A','B','C'];
+  const assignedTeam = teams[(season.roster||[]).length % teams.length];
   const newPlayerObj = { name:formattedName, role:'Player', team:assignedTeam };
 
   // Update both: group.players (canonical roster of names) and season.roster (this month's team/role)
@@ -437,6 +449,8 @@ function launchApp(){
   });
   renderAdminRoles();
   renderTwistToggles();
+  const rg=document.getElementById('roleGuideCard');
+  if(rg) rg.style.display = (season.rolesEnabled!==false) ? '' : 'none';
   subscribe();
 }
 
@@ -504,7 +518,8 @@ function renderHome(){
   // Role bar
   const {capTarget=16,vcTarget=20,minWorkouts=12,days:DAYS=31,month,year}=season;
   let rHTML='';
-  if(pl.role!=='Player'){
+  const rolesOn = season.rolesEnabled !== false;
+  if(rolesOn && pl.role!=='Player'){
     const tgt=pl.role==='Captain'?capTarget:vcTarget;
     const bonus=pl.role==='Captain'?10:15;
     const penalty=10;
@@ -555,7 +570,7 @@ function renderHome(){
   // Team streak card
   const team=pl.team;
   const teamMembers=(season.roster||[]).filter(p=>p.team===team);
-  const threshold=Math.ceil(teamMembers.length*0.6);
+  const threshold=Math.ceil(teamMembers.length*(season.teamStreakThreshold??0.6));
   const teamLogs=allLogs.filter(l=>(season.roster||[]).find(p=>p.name===l.player&&p.team===team));;
   const dc={};
   teamLogs.forEach(l=>{ if(!dc[l.day]) dc[l.day]=new Set(); dc[l.day].add(l.player); });
@@ -801,17 +816,19 @@ async function resolveFlag(logId,action){
 // ── ADMIN ─────────────────────────────────────────────────────────────────
 function renderAdminRoles(){
   const players=season.roster||[];
+  const numTeams=season.numTeams===2?2:3;
+  const teamOpts=numTeams===2?['A','B']:['A','B','C'];
+  const rolesOn=season.rolesEnabled!==false;
+  const cols=rolesOn?'1fr 80px 130px':'1fr 80px';
   document.getElementById('adminRoles').innerHTML=players.map(p=>`
-    <div style="display:grid;grid-template-columns:1fr 80px 130px;gap:6px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+    <div style="display:grid;grid-template-columns:${cols};gap:6px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
       <span style="font-size:13px;font-weight:600">${p.name}</span>
       <select id="team_${p.name}" style="padding:6px;font-size:12px;margin-bottom:0">
-        <option value="A"${p.team==='A'?' selected':''}>Team A</option>
-        <option value="B"${p.team==='B'?' selected':''}>Team B</option>
-        <option value="C"${p.team==='C'?' selected':''}>Team C</option>
+        ${teamOpts.map(t=>`<option value="${t}"${p.team===t?' selected':''}>Team ${t}</option>`).join('')}
       </select>
-      <select id="role_${p.name}" style="padding:6px;font-size:12px;margin-bottom:0">
+      ${rolesOn?`<select id="role_${p.name}" style="padding:6px;font-size:12px;margin-bottom:0">
         ${['Player','Vice Captain','Captain'].map(r=>`<option value="${r}"${p.role===r?' selected':''}>${r}</option>`).join('')}
-      </select>
+      </select>`:''}
     </div>`).join('');
 }
 
@@ -821,7 +838,7 @@ async function saveRoles(){
     const t=document.getElementById(`team_${p.name}`)?.value;
     const r=document.getElementById(`role_${p.name}`)?.value;
     if(t) p.team=t;
-    if(r) p.role=r;
+    if(r) p.role=r;          // absent when roles disabled — role stays as-is (Player)
     if(me.name===p.name){ me.team=p.team; me.role=p.role; }
   });
   try {
@@ -945,13 +962,15 @@ async function startNewSeason(code){
   const curRef = db.collection('groups').doc(code).collection('seasons').doc(curSid);
   batch.update(curRef, { status:'archived', endedAt:now });
 
-  // 2. Create new active season
+  // 2. Create new active season (carries numTeams + threshold forward from prev)
   const newRef = db.collection('groups').doc(code).collection('seasons').doc(newSid);
   batch.set(newRef, {
     month, year, days,
     capTarget: cur.capTarget ?? 16,
     vcTarget: cur.vcTarget ?? 20,
     minWorkouts: cur.minWorkouts ?? 12,
+    numTeams: cur.numTeams ?? 3,
+    teamStreakThreshold: cur.teamStreakThreshold ?? 0.6,
     rolesEnabled: keepRoles,
     roster: newRoster,
     status: 'active',
@@ -1055,6 +1074,9 @@ async function createGroup(){
   const capTarget=parseInt(document.getElementById('newGroupCapTarget').value);
   const vcTarget=parseInt(document.getElementById('newGroupVCTarget').value);
   const minWorkouts=parseInt(document.getElementById('newGroupMinWO').value);
+  const numTeams=Math.min(3, Math.max(2, parseInt(document.getElementById('newGroupNumTeams').value)||3));
+  const thresholdPct=Math.min(100, Math.max(30, parseInt(document.getElementById('newGroupThreshold').value)||60));
+  const rolesEnabled=document.getElementById('newGroupRoles').checked;
   const code=Math.random().toString(36).substring(2,8).toUpperCase();
   const sid=seasonIdOf(month, year);
   const now=firebase.firestore.FieldValue.serverTimestamp();
@@ -1067,6 +1089,18 @@ async function createGroup(){
     players: [],            // canonical roster of names; populated as players register
     currentSeasonId: sid,
     createdAt: now
+  });
+  const seasonRef = groupRef.collection('seasons').doc(sid);
+  batch.set(seasonRef, {
+    month, year, days,
+    capTarget, vcTarget, minWorkouts,
+    numTeams,                          // 2 or 3 — how many teams this season uses
+    teamStreakThreshold: thresholdPct/100,  // fraction (0.6 = 60%)
+    rolesEnabled,                      // Captain/VC on or off for this season
+    roster: [],             // populated as players register
+    status: 'active',
+    startedAt: now,
+    endedAt: null
   });
   const seasonRef = groupRef.collection('seasons').doc(sid);
   batch.set(seasonRef, {
@@ -1086,6 +1120,25 @@ async function createGroup(){
   res.classList.remove('hidden');
   loadSuperAdmin();
 }
+
+// ── THEME (light/dark) ─────────────────────────────────────────────────────
+// Persisted in localStorage. Applied to <html data-theme="...">. CSS vars do
+// the rest. Default is dark (no attribute = dark via the :root default).
+function applyTheme(theme){
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('forge_theme', theme);
+  const btn=document.getElementById('themeToggle');
+  if(btn) btn.textContent = theme==='light' ? '☀️' : '🌙';
+}
+function toggleTheme(){
+  const cur=document.documentElement.getAttribute('data-theme')||'dark';
+  applyTheme(cur==='light' ? 'dark' : 'light');
+}
+// Apply saved theme immediately at script load (before user interacts)
+(function(){
+  const saved=localStorage.getItem('forge_theme')||'dark';
+  document.documentElement.setAttribute('data-theme', saved);
+})();
 
 // ── TABS ──────────────────────────────────────────────────────────────────
 const TABS=['home','log','lb','feed','admin'];

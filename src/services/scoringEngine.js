@@ -58,7 +58,7 @@ function score(playerName){
 
   // ── TEAM STREAK BONUS (cumulative +1/+2/+3, only players who logged that day) ──
   const teamMembers = roster.filter(x=>x.team===p.team);
-  const teamThreshold = Math.ceil(teamMembers.length * 0.6);
+  const teamThreshold = Math.ceil(teamMembers.length * (cfg.teamStreakThreshold ?? 0.6));
   const teamLogs = allLogs.filter(l=>roster.find(x=>x.name===l.player&&x.team===p.team));
   const dc = {};
   teamLogs.forEach(l=>{ if(!dc[l.day]) dc[l.day]=new Set(); dc[l.day].add(l.player); });
