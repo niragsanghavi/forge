@@ -545,10 +545,10 @@ function renderHome(){
     </div>`:'';
 
   // Stats row
+  document.getElementById('hStats').style.gridTemplateColumns='1fr 1fr';
   document.getElementById('hStats').innerHTML=`
     <div class="sc"><div class="sv">${sc.wo}</div><div class="sl">WORKOUTS</div></div>
-    <div class="sc"><div class="sv" style="color:var(--orange)">${sc.streak}🔥</div><div class="sl">STREAK</div></div>
-    <div class="sc"><div class="sv">${sc.total}</div><div class="sl">POINTS</div></div>`;
+    <div class="sc"><div class="sv" style="color:var(--orange)">${sc.streak}🔥</div><div class="sl">STREAK</div></div>`;
 
   // Role bar
   const {capTarget=16,vcTarget=20,minWorkouts=12,days:DAYS=31,month,year}=season;
@@ -636,8 +636,12 @@ function getNudgeHTML(playerName,sc){
   const myIdx=sorted.findIndex(p=>p.name===playerName);
   const myPts=sorted[myIdx]?.pts||0;
   if(myIdx===0){
-    const gap=myPts-(sorted[1]?.pts||0);
-    return `<div class="nudge"><div class="nudge-icon">👑</div><div class="nudge-text">You're leading the pack. <strong>${sorted[1]?.name}</strong> is ${gap} pts behind. Don't get comfortable.</div></div>`;
+    const second=sorted[1];
+    if(!second){
+      return `<div class="nudge"><div class="nudge-icon">👑</div><div class="nudge-text">You're the only one here so far. Top spot's yours by default — invite the others and defend it.</div></div>`;
+    }
+    const gap=myPts-second.pts;
+    return `<div class="nudge"><div class="nudge-icon">👑</div><div class="nudge-text">You're leading the pack. <strong>${second.name}</strong> is ${gap} pts behind. Don't get comfortable.</div></div>`;
   }
   const ahead=sorted[myIdx-1];
   const gap=ahead.pts-myPts;
@@ -744,13 +748,13 @@ function renderLB(){
       ['Role bonus',my.rb,pl.role+' — applied on last day'],
       ['30-day bonus',my.b30,'All days logged'],
       ['Boss week bonus',my.bossBonus||0,'Double base points week'],
-      ['Penalty',my.pen,'Applied on last day if <min workouts'],
+      ['Penalty',my.pen,'If under min workouts (last day)'],
     ].map(([l,v,s])=>`
-      <div class="row" style="padding:8px 0;border-bottom:1px solid var(--border)">
-        <div><div style="font-size:13px">${l}</div><div style="font-size:11px;color:var(--muted)">${s}</div></div>
-        <div style="font-size:14px;font-weight:700;color:${v<0?'var(--red)':v>0?'var(--green)':'var(--muted)'}">${v>0?'+':''}${v}</div>
+      <div class="row" style="padding:8px 0;border-bottom:1px solid var(--border);gap:12px">
+        <div style="flex:1"><div style="font-size:13px">${l}</div><div style="font-size:11px;color:var(--muted)">${s}</div></div>
+        <div style="font-size:14px;font-weight:700;flex-shrink:0;color:${v<0?'var(--red)':v>0?'var(--green)':'var(--muted)'}">${v>0?'+':''}${v}</div>
       </div>`).join('')}
-    <div class="row" style="padding:10px 0 0">
+    <div class="row" style="padding:14px 0 0;margin-top:6px;border-top:2px solid var(--border)">
       <div style="font-size:15px;font-weight:700">Total</div>
       <div style="font-size:24px;font-weight:800;color:var(--gold)">${my.total}</div>
     </div>`;
