@@ -19,6 +19,7 @@
       <input class="code-input" id="codeInput" maxlength="6" placeholder="······" autocomplete="off" oninput="this.value=this.value.toUpperCase()">
       <div id="codeError" class="warn-box warn-red hidden">Group not found. Check your code.</div>
       <button class="btn btn-gold" onclick="verifyCode()">Continue</button>
+      <div id="joinCancel" class="hidden" style="margin-top:12px;text-align:center"><span onclick="cancelJoin()" style="font-size:12px;color:var(--gold);cursor:pointer">← Back to my group</span></div>
     </div>
     <div class="ob-step" id="ob-s2">
       <div class="ob-title">Who are you?</div>
@@ -69,6 +70,7 @@
       </div>
     </div>
   </nav>
+  <div id="groupSwitcher" class="group-switcher" style="display:none"></div>
   <div class="tabs">
     <div class="tab active" onclick="showTab('home')">Home</div>
     <div class="tab" onclick="showTab('log')">Log</div>
@@ -96,6 +98,8 @@
     <div class="card" id="streakCard"></div>
     <div class="shdr">Quick Log</div>
     <button class="btn btn-gold" onclick="showTab('log')">Log Today's Workout</button>
+    <div class="shdr">Groups</div>
+    <button class="btn btn-surface" onclick="joinAnotherGroup()">+ Join another group</button>
   </div>
 
   <!-- LOG -->
@@ -358,6 +362,38 @@ function getDailyFact(){ return DAILY_FACTS[(new Date().getDate()-1)%DAILY_FACTS
 function getStreakMsg(s){ const keys=Object.keys(STREAK_MSGS).map(Number).sort((a,b)=>b-a); for(const k of keys){if(s>=k)return STREAK_MSGS[k];} return null; }
 function getRandomComeback(){ return COMEBACK_MSGS[Math.floor(Math.random()*COMEBACK_MSGS.length)]; }
 
+// ── SESSION STORE (multi-group) ─────────────────────────────────────────────
+// Device-local multi-session: localStorage holds a LIST of {code, player, name}
+// plus the active group's code. No cross-device identity (deferred) — each
+// device joins each group independently.
+const MAX_GROUPS = 3;
+function getSessions(){ try { return JSON.parse(localStorage.getItem('forge_sessions')||'[]'); } catch(e){ return []; } }
+function saveSessions(list){ localStorage.setItem('forge_sessions', JSON.stringify(list)); }
+function getActiveCode(){ return localStorage.getItem('forge_active'); }
+function setActiveCode(code){ localStorage.setItem('forge_active', code); }
+function upsertSession(code, player, name){
+  const list = getSessions();
+  const i = list.findIndex(s=>s.code===code);
+  const entry = { code, player, name: name || (i>=0 && list[i].name) || code };
+  if(i>=0) list[i] = entry; else list.push(entry);
+  saveSessions(list);
+  setActiveCode(code);
+}
+function removeSession(code){
+  const list = getSessions().filter(s=>s.code!==code);
+  saveSessions(list);
+  if(getActiveCode()===code){ if(list.length) setActiveCode(list[0].code); else localStorage.removeItem('forge_active'); }
+  return list;
+}
+// One-time migration from the old single-session key so existing users aren't logged out.
+function migrateLegacySession(){
+  const legacy = localStorage.getItem('forge_session');
+  if(legacy && getSessions().length===0){
+    try { const s = JSON.parse(legacy); if(s && s.code && s.player){ saveSessions([{code:s.code, player:s.player, name:s.code}]); setActiveCode(s.code); } } catch(e){}
+  }
+  localStorage.removeItem('forge_session');
+}
+
 // ── BOOT ──────────────────────────────────────────────────────────────────
 window.onload = () => {
   // Establish the anonymous auth session FIRST, before any Firestore read.
@@ -378,11 +414,13 @@ function bootApp(){
     const pin = prompt('Super admin PIN:');
     if(pin === SUPER_PIN){ showScreen('super'); loadSuperAdmin(); return; }
   }
-  const saved = localStorage.getItem('forge_session');
-  if(saved){
-    const s = JSON.parse(saved);
-    groupCode = s.code;
-    me = s.player;
+  migrateLegacySession();
+  const sessions = getSessions();
+  if(sessions.length){
+    const active = sessions.find(s=>s.code===getActiveCode()) || sessions[0];
+    setActiveCode(active.code);
+    groupCode = active.code;
+    me = active.player;
     loadGroup(groupCode, true);
   } else {
     showScreen('onboard');
@@ -406,6 +444,7 @@ async function verifyCode(){
   const err = document.getElementById('codeError');
   err.classList.add('hidden');
   try {
+    if(window._joinMode && getSessions().some(s=>s.code===code)){ alert('You\'re already in this group — switching to it.'); switchGroup(code); return; }
     const snap = await db.collection('groups').doc(code).get();
     if(!snap.exists){ err.classList.remove('hidden'); return; }
     groupData = snap.data();
@@ -471,10 +510,10 @@ function submitPinEntry(){
     document.getElementById('pinEntry').value='';
     return;
   }
-  // Correct PIN — log them in and remember the session on this device.
+  // Correct PIN — log them in and remember this group on this device.
   me = p;
   window._pinEntryFor = null;
-  localStorage.setItem('forge_session', JSON.stringify({code:groupCode, player:p}));
+  upsertSession(groupCode, p, groupData?.name);
   launchApp();
 }
 
@@ -557,7 +596,7 @@ async function submitNewPin(){
       groupData.players = newGroupPlayers;
       season.roster = newSeasonRoster;
       me = newPlayerObj;
-      localStorage.setItem('forge_session', JSON.stringify({code:groupCode, player:newPlayerObj}));
+      upsertSession(groupCode, newPlayerObj, groupData?.name);
     } else if(flow.mode === 'grace'){
       // Existing player setting a PIN for the first time. Patch their roster entry.
       const roster = JSON.parse(JSON.stringify(season.roster||[]));
@@ -568,7 +607,7 @@ async function submitNewPin(){
       await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).update({ roster });
       season.roster = roster;
       me = entry;
-      localStorage.setItem('forge_session', JSON.stringify({code:groupCode, player:entry}));
+      upsertSession(groupCode, newPlayerObj, groupData?.name);
     }
     window._pinFlow = null;
     launchApp();
@@ -576,45 +615,80 @@ async function submitNewPin(){
 }
 
 function promptSwitch(){
-  if(!confirm('Switch user or group?')) return;
-  unsub.forEach(fn=>fn());
-  localStorage.removeItem('forge_session');
-  location.reload();
+  const sessions = getSessions();
+  if(sessions.length > 1){
+    if(!confirm(`Leave "${groupData?.name||groupCode}" on this device?\n\nYour other groups stay logged in. Your data and membership are safe — you can rejoin anytime with the group code.`)) return;
+    unsub.forEach(fn=>fn()); unsub = [];
+    const remaining = removeSession(groupCode);
+    const next = remaining[0];
+    groupCode = next.code; me = next.player; setActiveCode(next.code);
+    allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; adminUnlocked=false;
+    showTab('home');
+    loadGroup(groupCode, true);
+  } else {
+    if(!confirm('Log out on this device? You can sign back in with your group code.')) return;
+    unsub.forEach(fn=>fn()); unsub = [];
+    localStorage.removeItem('forge_sessions');
+    localStorage.removeItem('forge_active');
+    location.reload();
+  }
 }
 
 // ── LOAD GROUP ────────────────────────────────────────────────────────────
 async function loadGroup(code, fromCache){
-  // Always load group + active season fresh from Firestore.
-  // The fromCache flag means "we have a localStorage session, render immediately
-  // while we fetch", but we still must read the season before launching.
-  const gSnap = await db.collection('groups').doc(code).get();
-  if(!gSnap.exists){ localStorage.removeItem('forge_session'); location.reload(); return; }
-  groupData = gSnap.data();
+  // On a genuine "this group is gone/broken" error we drop ONLY that group's
+  // session (handleDeadGroup) and fall back to another joined group — never nuke
+  // everything (that caused the mass-lockout). Transient errors just alert.
+  try {
+    const gSnap = await db.collection('groups').doc(code).get();
+    if(!gSnap.exists){ handleDeadGroup(code, 'That group no longer exists.'); return; }
+    groupData = gSnap.data();
 
-  const sid = groupData.currentSeasonId;
-  if(!sid){ alert('This group has no active season.'); localStorage.removeItem('forge_session'); location.reload(); return; }
-  const sSnap = await db.collection('groups').doc(code).collection('seasons').doc(sid).get();
-  if(!sSnap.exists){ alert('Active season missing.'); localStorage.removeItem('forge_session'); location.reload(); return; }
-  season = sSnap.data();
-  seasonId = sid;
+    const sid = groupData.currentSeasonId;
+    if(!sid){ handleDeadGroup(code, 'That group has no active season.'); return; }
+    const sSnap = await db.collection('groups').doc(code).collection('seasons').doc(sid).get();
+    if(!sSnap.exists){ handleDeadGroup(code, 'That group\'s active season is missing.'); return; }
+    season = sSnap.data();
+    seasonId = sid;
 
-  // Refresh `me` against the freshly loaded season roster (team/role may have changed)
-  if(me){
-    const fresh = (season.roster||[]).find(p=>p.name===me.name);
-    if(fresh) me = fresh;
+    // Refresh `me` against the freshly loaded roster (team/role/consent may have changed)
+    if(me){
+      const fresh = (season.roster||[]).find(p=>p.name===me.name);
+      if(fresh) me = fresh;
+    }
+    // Keep this group's session entry fresh (group name + latest player record).
+    upsertSession(code, me, groupData.name);
+
+    if(gracePinCheckOnResume()) return;
+    launchApp();
+  } catch(e){
+    console.error('loadGroup failed:', e);
+    alert('Could not load your group — check your connection and try again.');
+    if(!getSessions().length){ showScreen('onboard'); showObStep(1); }
   }
+}
 
-  // Stage 2 grace flow: existing user with no PIN yet → route to set one.
-  // (Collected, not enforced — this never blocks, it just prompts once.)
-  if(gracePinCheckOnResume()) return;
-
-  launchApp();
+// A specific group is gone/broken: drop just its session, fall back to another.
+function handleDeadGroup(code, msg){
+  const remaining = removeSession(code);
+  alert(msg + ' Removing it from this device.');
+  if(remaining.length){
+    const next = remaining[0];
+    groupCode = next.code; me = next.player; setActiveCode(next.code);
+    allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; adminUnlocked=false;
+    loadGroup(groupCode, true);
+  } else {
+    showScreen('onboard'); showObStep(1);
+  }
 }
 
 function launchApp(){
+  window._joinMode = false;
+  document.getElementById('joinCancel')?.classList.add('hidden');
   showScreen('app');
   document.getElementById('navAv').textContent = me.name[0];
   document.getElementById('navNm').textContent = me.name;
+  renderGroupSwitcher();
   const sel = document.getElementById('aPlayer');
   sel.innerHTML = '<option value="">Select player</option>';
   (season.roster||[]).forEach(p=>{
@@ -626,6 +700,55 @@ function launchApp(){
   const rg=document.getElementById('roleGuideCard');
   if(rg) rg.style.display = (season.rolesEnabled!==false) ? '' : 'none';
   subscribe();
+}
+
+// Top row of group chips — tap to switch. Hidden when only one group or in super-admin.
+function renderGroupSwitcher(){
+  const el = document.getElementById('groupSwitcher');
+  if(!el) return;
+  const sessions = getSessions();
+  if(window.fromSuper || sessions.length <= 1){ el.style.display='none'; el.innerHTML=''; return; }
+  el.style.display='flex';
+  el.innerHTML = sessions.map(s=>{
+    const active = s.code===groupCode;
+    return `<div class="gs-chip${active?' active':''}" onclick="switchGroup('${s.code}')">${s.name||s.code}</div>`;
+  }).join('') + `<div class="gs-chip gs-add" onclick="joinAnotherGroup()">+ Join</div>`;
+}
+
+// Switch active group: tear down listeners, swap state, reload chosen group.
+function switchGroup(code){
+  if(code===groupCode) return;
+  const s = getSessions().find(x=>x.code===code);
+  if(!s) return;
+  unsub.forEach(fn=>fn()); unsub = [];
+  setActiveCode(code);
+  groupCode = s.code; me = s.player;
+  allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; adminUnlocked=false;
+  showTab('home');
+  loadGroup(groupCode, true);
+}
+
+// Start the flow to join an additional group (max MAX_GROUPS).
+function joinAnotherGroup(){
+  if(getSessions().length >= MAX_GROUPS){ alert(`You can be in up to ${MAX_GROUPS} groups on this device. Leave one (tap your name, top-right) before joining another.`); return; }
+  window._joinMode = true;
+  unsub.forEach(fn=>fn()); unsub = [];
+  document.getElementById('codeInput').value='';
+  document.getElementById('codeError').classList.add('hidden');
+  document.getElementById('joinCancel')?.classList.remove('hidden');
+  showScreen('onboard');
+  showObStep(1);
+}
+
+// Cancel an in-progress join and return to the active group.
+function cancelJoin(){
+  window._joinMode = false;
+  document.getElementById('joinCancel')?.classList.add('hidden');
+  const sessions = getSessions();
+  if(!sessions.length) return;
+  const active = sessions.find(s=>s.code===getActiveCode()) || sessions[0];
+  groupCode = active.code; me = active.player; setActiveCode(active.code);
+  loadGroup(groupCode, true);
 }
 
 // ── SUBSCRIPTIONS ─────────────────────────────────────────────────────────
@@ -1022,7 +1145,7 @@ async function saveRoles(){
   try {
     await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).update({roster});
     season.roster=roster;
-    localStorage.setItem('forge_session',JSON.stringify({code:groupCode,player:me}));
+    upsertSession(groupCode, me, groupData?.name);
     renderAdminRoles(); refresh();
     alert('✅ Roles saved');
   } catch(e){ alert('❌ Save failed — check connection: '+e.message); }
@@ -1335,8 +1458,7 @@ function exitSuper(){
   // Leave super admin entirely. If a normal player session exists on this
   // device, the onboarding boot logic will pick it up on reload; otherwise
   // the user lands on the group-code entry screen.
-  const saved = localStorage.getItem('forge_session');
-  if(saved){
+  if(getSessions().length){
     location.reload();           // boot logic resumes the player's own session
   } else {
     showScreen('onboard');
