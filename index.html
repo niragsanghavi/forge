@@ -169,6 +169,8 @@
     <div class="tmuted" style="margin-bottom:16px;font-size:12px">Across every Forge group</div>
     <div class="shdr">Most Active Groups Today</div>
     <div class="card" id="globalActive"><div class="tmuted">Open this tab to load…</div></div>
+    <div class="shdr">Top Groups — Avg Points / Player</div>
+    <div class="card" id="globalGroups"><div class="tmuted">Open this tab to load…</div></div>
     <div class="shdr">Points Leaderboard — Top 5</div>
     <div class="card" id="globalPoints"><div class="tmuted">Open this tab to load…</div></div>
   </div>
@@ -620,7 +622,7 @@ async function submitNewPin(){
       await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).update({ roster });
       season.roster = roster;
       me = entry;
-      upsertSession(groupCode, newPlayerObj, groupData?.name);
+      upsertSession(groupCode, entry, groupData?.name);
     }
     window._pinFlow = null;
     launchApp();
@@ -728,7 +730,9 @@ function renderGroupSwitcher(){
   }).join('') + `<div class="gs-chip gs-add" onclick="joinAnotherGroup()">+ Join</div>`;
 }
 
-// Switch active group: tear down listeners, swap state, reload chosen group.
+// Switch active group: tear down listeners, swap state, CLEAR the old group's
+// painted DOM (so its data can't linger as a ghost while the new group's first
+// snapshot loads), then reload.
 function switchGroup(code){
   if(code===groupCode) return;
   const s = getSessions().find(x=>x.code===code);
@@ -737,6 +741,7 @@ function switchGroup(code){
   setActiveCode(code);
   groupCode = s.code; me = s.player;
   allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; adminUnlocked=false;
+  ['heroCard','nudgeCard','streakCardHighlight','roleBar','hStats','twistBanner','calGrid','streakCard','teamStand','indLb','ptsBk','feedList','globalConsentCard'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=''; });
   showTab('home');
   loadGroup(groupCode, true);
 }
@@ -959,7 +964,36 @@ async function submitLog(){
   const btn=document.getElementById('subBtn');
   btn.disabled=true; btn.textContent='Saving...';
   try{
-    await db.collection('logs').add({groupCode,player:me.name,team:me.team,role:me.role,workouts:selW,day:selDay,month:season.month,year:season.year,timestamp:firebase.firestore.FieldValue.serverTimestamp()});
+    // Log once, post to every group you're in on this device — but ONLY to groups
+    // currently on the SAME season month as this workout. A June workout has no
+    // place in a group that's rolled over to July. Active group is always a target.
+    const sessions = getSessions();
+    const targets = [];
+    await Promise.all(sessions.map(async sess => {
+      if(sess.code === groupCode){ targets.push(sess); return; }
+      try {
+        const gSnap = await db.collection('groups').doc(sess.code).get();
+        if(gSnap.exists && gSnap.data().currentSeasonId === seasonId) targets.push(sess);
+      } catch(e){ /* unreadable group — skip, never block the log */ }
+    }));
+
+    const batch = db.batch();
+    targets.forEach(sess => {
+      const ref = db.collection('logs').doc();
+      batch.set(ref, {
+        groupCode: sess.code,
+        player: sess.player.name,
+        team: sess.player.team,
+        role: sess.player.role,
+        workouts: selW,
+        day: selDay,
+        month: season.month,
+        year: season.year,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    });
+    await batch.commit();
+
     const sc=score(me.name);
     const myDays=[...allLogs.filter(l=>l.player===me.name).map(l=>l.day)].sort((a,b)=>a-b);
     const lastDay=myDays.length>=2?myDays[myDays.length-2]:null;
@@ -967,11 +1001,12 @@ async function submitLog(){
     document.getElementById('ls2').classList.add('hidden');
     document.getElementById('ls3').classList.remove('hidden');
     document.getElementById('succTitle').textContent=isComeback?'Welcome Back!':'Forged!';
-    document.getElementById('succSub').textContent=`${selW.join(', ')} · Day ${selDay}`;
+    const multiNote = targets.length>1 ? ` · posted to ${targets.length} groups` : '';
+    document.getElementById('succSub').textContent=`${selW.join(', ')} · Day ${selDay}${multiNote}`;
     const cbMsg=document.getElementById('comebackMsg');
     if(isComeback){cbMsg.textContent=getRandomComeback();cbMsg.classList.remove('hidden');}else{cbMsg.classList.add('hidden');}
     document.getElementById('succStats').innerHTML=`<div class="srow" style="margin-bottom:0"><div class="sc"><div class="sv">${sc.total}</div><div class="sl">POINTS</div></div><div class="sc"><div class="sv">${sc.wo}</div><div class="sl">WORKOUTS</div></div><div class="sc"><div class="sv" style="color:var(--orange)">${sc.streak}🔥</div><div class="sl">STREAK</div></div></div>`;
-  } catch(e){ alert('Error saving. Check connection.'); btn.disabled=false; btn.textContent='Log Workout'; }
+  } catch(e){ console.error('submitLog failed:',e); alert('Error saving. Check connection.'); btn.disabled=false; btn.textContent='Log Workout'; }
 }
 function resetLog(){ selDay=null; selW=[]; ['ls1','ls2','ls3'].forEach((id,i)=>document.getElementById(id).classList[i===0?'remove':'add']('hidden')); document.getElementById('pickerWrap').classList.add('hidden'); showTab('home'); }
 function backToS1(){ document.getElementById('ls1').classList.remove('hidden'); document.getElementById('ls2').classList.add('hidden'); }
@@ -1612,12 +1647,16 @@ function toggleTheme(){
 // ── GLOBAL LEADERBOARD (cross-group, opt-in) ───────────────────────────────
 // One-shot read (not a live listener). Points use the SAME scoring engine as
 // in-app, passing each group's data as ctx. Only players who opted in appear.
+// ── GLOBAL LEADERBOARD (cross-group, opt-in) ───────────────────────────────
+// One-shot read. Each group's active season is loaded once and scored with the
+// SAME engine (via ctx). Group-level boards use all players; the individual
+// points board uses only opted-in players (globalConsent===true).
 async function loadGlobal(){
   const actEl=document.getElementById('globalActive');
+  const grpEl=document.getElementById('globalGroups');
   const ptsEl=document.getElementById('globalPoints');
-  if(!actEl||!ptsEl) return;
-  actEl.innerHTML='<div class="tmuted">Loading…</div>';
-  ptsEl.innerHTML='<div class="tmuted">Loading…</div>';
+  if(!actEl||!grpEl||!ptsEl) return;
+  actEl.innerHTML=grpEl.innerHTML=ptsEl.innerHTML='<div class="tmuted">Loading…</div>';
   try{
     const gSnap=await db.collection('groups').get();
     const groups=gSnap.docs.map(d=>({code:d.id,...d.data()}));
@@ -1626,7 +1665,7 @@ async function loadGlobal(){
     const bonusSnap=await db.collection('bonuses_30day').get();
     const allBonuses=bonusSnap.docs.map(d=>d.data());
 
-    // Most active groups today (logs whose timestamp is today's calendar date)
+    // Most active groups today
     const now=new Date();
     const startOfDay=new Date(now.getFullYear(),now.getMonth(),now.getDate());
     const perGroup={};
@@ -1641,15 +1680,16 @@ async function loadGlobal(){
       ? '<div class="tmuted">No workouts logged anywhere yet today.</div>'
       : activeRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${g.name}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--green)">${g.count}</div><div style="font-size:10px;color:var(--muted)">logs today</div></div></div>`).join('');
 
-    // Points leaderboard — opt-in only (roster entries with globalConsent===true)
-    const entries=[];
+    // Score every group's active season once → group aggregates + consented players
+    const groupAgg=[];
+    const playerEntries=[];
     for(const g of groups){
       const sid=g.currentSeasonId; if(!sid) continue;
       const sSnap=await db.collection('groups').doc(g.code).collection('seasons').doc(sid).get();
       if(!sSnap.exists) continue;
       const sData=sSnap.data();
-      const consenters=(sData.roster||[]).filter(p=>p.globalConsent===true);
-      if(consenters.length===0) continue;
+      const roster=sData.roster||[];
+      if(roster.length===0) continue;
       const twSnap=await db.collection('groups').doc(g.code).collection('seasons').doc(sid).collection('twists').get();
       const twists={}; twSnap.docs.forEach(t=>{twists[t.id]=t.data();});
       const ctx={
@@ -1658,14 +1698,28 @@ async function loadGlobal(){
         twists,
         bonuses:allBonuses.filter(b=>b.groupCode===g.code&&b.month===sData.month&&b.year===sData.year)
       };
-      consenters.forEach(p=>entries.push({name:p.name, group:g.name, points:score(p.name, ctx).total}));
+      let groupTotal=0;
+      roster.forEach(p=>{
+        const t=score(p.name, ctx).total;
+        groupTotal+=t;
+        if(p.globalConsent===true) playerEntries.push({name:p.name, group:g.name, points:t});
+      });
+      groupAgg.push({name:g.name, total:groupTotal, count:roster.length, avg:Math.round(groupTotal/roster.length)});
     }
-    entries.sort((a,b)=>b.points-a.points);
-    const top=entries.slice(0,5);
+
+    // Top groups by avg points / player (total shown alongside)
+    const grpRanked=groupAgg.sort((a,b)=>b.avg-a.avg).slice(0,5);
+    grpEl.innerHTML = grpRanked.length===0
+      ? '<div class="tmuted">No groups yet.</div>'
+      : grpRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${g.name}</div><div class="lbmeta">${g.count} players · ${g.total} total pts</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${g.avg}</div><div style="font-size:10px;color:var(--muted)">avg/player</div></div></div>`).join('');
+
+    // Individual points — opt-in only
+    playerEntries.sort((a,b)=>b.points-a.points);
+    const top=playerEntries.slice(0,5);
     ptsEl.innerHTML = top.length===0
       ? '<div class="tmuted">No one has opted in yet. Turn on "Show me on the global leaderboard" on your Home screen to appear here.</div>'
       : top.map((e,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${e.name}</div><div class="lbmeta">${e.group}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${e.points}</div><div style="font-size:10px;color:var(--muted)">pts</div></div></div>`).join('');
-  }catch(e){ console.error('loadGlobal failed:',e); actEl.innerHTML='<div class="tmuted">Could not load global stats. Check connection.</div>'; ptsEl.innerHTML=''; }
+  }catch(e){ console.error('loadGlobal failed:',e); actEl.innerHTML='<div class="tmuted">Could not load global stats. Check connection.</div>'; grpEl.innerHTML=''; ptsEl.innerHTML=''; }
 }
 
 // Self-serve opt-in for the global points board. Default OFF (privacy-first).
