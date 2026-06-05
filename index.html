@@ -42,6 +42,15 @@
       <div id="pinError" class="warn-box warn-red hidden" style="margin-top:10px"></div>
       <button class="btn btn-gold" style="margin-top:10px" onclick="submitNewPin()">Set PIN &amp; Continue</button>
     </div>
+    <div class="ob-step" id="ob-s4">
+      <div class="ob-title">Enter your PIN</div>
+      <div class="ob-sub" id="ob-s4-sub">Welcome back. Enter your 4-digit PIN to continue.</div>
+      <input class="code-input" id="pinEntry" type="tel" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off" oninput="this.value=this.value.replace(/[^0-9]/g,'')" onkeydown="if(event.key==='Enter')submitPinEntry()">
+      <div id="pinEntryError" class="warn-box warn-red hidden" style="margin-top:10px"></div>
+      <button class="btn btn-gold" style="margin-top:10px" onclick="submitPinEntry()">Continue</button>
+      <div style="margin-top:14px;font-size:11px;color:var(--muted);text-align:center">Forgot your PIN? Message your group admin to reset it.</div>
+      <div style="margin-top:8px;text-align:center"><span onclick="backToPicker()" style="font-size:12px;color:var(--gold);cursor:pointer">← Not you? Pick a different name</span></div>
+    </div>
   </div>
 </div>
 
@@ -428,8 +437,7 @@ function buildPlayerPicker(players){
 function choosePlayer(name){
   const p = (season.roster||[]).find(x=>x.name===name);
   if(!p){ return; }
-  // Stage 2: if this player has no PIN yet (existing pre-auth user), route them
-  // to set one before entering. Collected, not enforced — no lockout.
+  // No PIN yet (existing pre-auth user) → grace flow: set one before entering.
   if(!p.pin){
     window._pinFlow = { mode:'grace', name:p.name };
     document.getElementById('ob-s3-sub').textContent = `Welcome back, ${p.name}. Set a 4-digit PIN to secure your account.`;
@@ -439,9 +447,43 @@ function choosePlayer(name){
     showObStep(3);
     return;
   }
+  // Stage 3: player HAS a PIN → require them to enter it before launching.
+  window._pinEntryFor = p.name;
+  document.getElementById('ob-s4-sub').textContent = `Welcome back, ${p.name}. Enter your 4-digit PIN.`;
+  document.getElementById('pinEntry').value = '';
+  document.getElementById('pinEntryError').classList.add('hidden');
+  showObStep(4);
+  setTimeout(()=>document.getElementById('pinEntry').focus(), 100);
+}
+
+// Stage 3: validate the entered PIN against the player's stored PIN.
+function submitPinEntry(){
+  const name = window._pinEntryFor;
+  const p = (season.roster||[]).find(x=>x.name===name);
+  const err = document.getElementById('pinEntryError');
+  err.classList.add('hidden');
+  if(!p){ err.textContent='Something went wrong. Pick your name again.'; err.classList.remove('hidden'); return; }
+  const entered = document.getElementById('pinEntry').value;
+  if(!/^\d{4}$/.test(entered)){ err.textContent='Enter your 4-digit PIN.'; err.classList.remove('hidden'); return; }
+  if(entered !== p.pin){
+    err.textContent='Incorrect PIN. Try again, or ask your admin to reset it.';
+    err.classList.remove('hidden');
+    document.getElementById('pinEntry').value='';
+    return;
+  }
+  // Correct PIN — log them in and remember the session on this device.
   me = p;
+  window._pinEntryFor = null;
   localStorage.setItem('forge_session', JSON.stringify({code:groupCode, player:p}));
   launchApp();
+}
+
+// Escape hatch from the PIN-entry screen back to the name grid.
+function backToPicker(){
+  window._pinEntryFor = null;
+  document.getElementById('pinEntry').value='';
+  document.getElementById('pinEntryError').classList.add('hidden');
+  showObStep(2);
 }
 
 // Stage 2 grace check for users resumed from a saved localStorage session.
@@ -467,6 +509,8 @@ function gracePinCheckOnResume(){
 //   mode 'register' = brand-new player being created
 //   mode 'grace'    = existing player (no pin yet) setting one for the first time
 window._pinFlow = null;
+// Stage 3: which player is currently being asked to ENTER their PIN (login gate).
+window._pinEntryFor = null;
 
 async function registerAndJoin(){
   const nameInput = document.getElementById('newPlayerNameInput');
