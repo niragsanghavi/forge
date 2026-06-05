@@ -76,6 +76,7 @@
     <div class="tab" onclick="showTab('log')">Log</div>
     <div class="tab" onclick="showTab('lb')">Board</div>
     <div class="tab" onclick="showTab('feed')">Feed</div>
+    <div class="tab" onclick="showTab('global')">Global</div>
     <div class="tab" onclick="showTab('admin')">Admin</div>
   </div>
 
@@ -96,6 +97,8 @@
     <div class="card" style="padding:12px"><div class="cg" id="calGrid"></div></div>
     <div class="shdr">Team Streak Days</div>
     <div class="card" id="streakCard"></div>
+    <div class="shdr">Global Leaderboard</div>
+    <div class="card" id="globalConsentCard"></div>
     <div class="shdr">Quick Log</div>
     <button class="btn btn-gold" onclick="showTab('log')">Log Today's Workout</button>
     <div class="shdr">Groups</div>
@@ -158,6 +161,16 @@
   <div class="page" id="page-feed">
     <div style="padding:8px 0 14px;font-size:20px;font-weight:800">Activity Feed</div>
     <div class="card" id="feedList"></div>
+  </div>
+
+  <!-- GLOBAL -->
+  <div class="page" id="page-global">
+    <div style="padding:8px 0 4px;font-size:20px;font-weight:800">Global</div>
+    <div class="tmuted" style="margin-bottom:16px;font-size:12px">Across every Forge group</div>
+    <div class="shdr">Most Active Groups Today</div>
+    <div class="card" id="globalActive"><div class="tmuted">Open this tab to load…</div></div>
+    <div class="shdr">Points Leaderboard — Top 5</div>
+    <div class="card" id="globalPoints"><div class="tmuted">Open this tab to load…</div></div>
   </div>
 
   <!-- ADMIN -->
@@ -768,7 +781,7 @@ function subscribe(){
   );
 }
 
-function refresh(){ renderHome(); renderLB(); renderFeed(); renderFlagQueue(); }
+function refresh(){ renderHome(); renderLB(); renderFeed(); renderFlagQueue(); renderGlobalConsent(); }
 
 // ── HOME ──────────────────────────────────────────────────────────────────
 function renderHome(){
@@ -1596,8 +1609,89 @@ function toggleTheme(){
   document.documentElement.setAttribute('data-theme', saved);
 })();
 
+// ── GLOBAL LEADERBOARD (cross-group, opt-in) ───────────────────────────────
+// One-shot read (not a live listener). Points use the SAME scoring engine as
+// in-app, passing each group's data as ctx. Only players who opted in appear.
+async function loadGlobal(){
+  const actEl=document.getElementById('globalActive');
+  const ptsEl=document.getElementById('globalPoints');
+  if(!actEl||!ptsEl) return;
+  actEl.innerHTML='<div class="tmuted">Loading…</div>';
+  ptsEl.innerHTML='<div class="tmuted">Loading…</div>';
+  try{
+    const gSnap=await db.collection('groups').get();
+    const groups=gSnap.docs.map(d=>({code:d.id,...d.data()}));
+    const logsSnap=await db.collection('logs').get();
+    const allLogsArr=logsSnap.docs.map(d=>({id:d.id,...d.data()}));
+    const bonusSnap=await db.collection('bonuses_30day').get();
+    const allBonuses=bonusSnap.docs.map(d=>d.data());
+
+    // Most active groups today (logs whose timestamp is today's calendar date)
+    const now=new Date();
+    const startOfDay=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    const perGroup={};
+    allLogsArr.forEach(l=>{
+      const ts=l.timestamp?.seconds?new Date(l.timestamp.seconds*1000):null;
+      if(ts&&ts>=startOfDay) perGroup[l.groupCode]=(perGroup[l.groupCode]||0)+1;
+    });
+    const activeRanked=Object.entries(perGroup)
+      .map(([code,count])=>({name:groups.find(g=>g.code===code)?.name||code,count}))
+      .sort((a,b)=>b.count-a.count).slice(0,5);
+    actEl.innerHTML = activeRanked.length===0
+      ? '<div class="tmuted">No workouts logged anywhere yet today.</div>'
+      : activeRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${g.name}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--green)">${g.count}</div><div style="font-size:10px;color:var(--muted)">logs today</div></div></div>`).join('');
+
+    // Points leaderboard — opt-in only (roster entries with globalConsent===true)
+    const entries=[];
+    for(const g of groups){
+      const sid=g.currentSeasonId; if(!sid) continue;
+      const sSnap=await db.collection('groups').doc(g.code).collection('seasons').doc(sid).get();
+      if(!sSnap.exists) continue;
+      const sData=sSnap.data();
+      const consenters=(sData.roster||[]).filter(p=>p.globalConsent===true);
+      if(consenters.length===0) continue;
+      const twSnap=await db.collection('groups').doc(g.code).collection('seasons').doc(sid).collection('twists').get();
+      const twists={}; twSnap.docs.forEach(t=>{twists[t.id]=t.data();});
+      const ctx={
+        season:sData,
+        logs:allLogsArr.filter(l=>l.groupCode===g.code&&l.month===sData.month&&l.year===sData.year),
+        twists,
+        bonuses:allBonuses.filter(b=>b.groupCode===g.code&&b.month===sData.month&&b.year===sData.year)
+      };
+      consenters.forEach(p=>entries.push({name:p.name, group:g.name, points:score(p.name, ctx).total}));
+    }
+    entries.sort((a,b)=>b.points-a.points);
+    const top=entries.slice(0,5);
+    ptsEl.innerHTML = top.length===0
+      ? '<div class="tmuted">No one has opted in yet. Turn on "Show me on the global leaderboard" on your Home screen to appear here.</div>'
+      : top.map((e,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${e.name}</div><div class="lbmeta">${e.group}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${e.points}</div><div style="font-size:10px;color:var(--muted)">pts</div></div></div>`).join('');
+  }catch(e){ console.error('loadGlobal failed:',e); actEl.innerHTML='<div class="tmuted">Could not load global stats. Check connection.</div>'; ptsEl.innerHTML=''; }
+}
+
+// Self-serve opt-in for the global points board. Default OFF (privacy-first).
+function renderGlobalConsent(){
+  const el=document.getElementById('globalConsentCard');
+  if(!el||!me) return;
+  const on = !!me.globalConsent;
+  el.innerHTML=`<div class="row">
+    <div style="flex:1;margin-right:12px"><div style="font-size:14px;font-weight:600">Show me on the global leaderboard</div><div class="tmuted" style="font-size:12px">Your name, group and points become visible to every Forge group. Off by default.</div></div>
+    <div class="toggle${on?' on':''}" onclick="toggleGlobalConsent(${!on})"></div>
+  </div>`;
+}
+async function toggleGlobalConsent(val){
+  try{
+    const roster=JSON.parse(JSON.stringify(season.roster||[]));
+    const entry=roster.find(p=>p.name===me.name);
+    if(!entry) return;
+    entry.globalConsent=val;
+    await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).update({roster});
+    season.roster=roster; me=entry;
+    upsertSession(groupCode, me, groupData?.name);
+    renderGlobalConsent();
+  }catch(e){ console.error(e); alert('Could not update preference — check connection.'); }
+}
 // ── TABS ──────────────────────────────────────────────────────────────────
-const TABS=['home','log','lb','feed','admin'];
+const TABS=['home','log','lb','feed','global','admin'];
 function showTab(t){
   if(t==='admin'&&!adminUnlocked){
     const pin=prompt('Enter admin PIN:');
@@ -1609,6 +1703,7 @@ function showTab(t){
   document.getElementById(`page-${t}`).classList.add('active');
   document.querySelectorAll('.tab')[TABS.indexOf(t)]?.classList.add('active');
   window.scrollTo(0,0);
+  if(t==='global') loadGlobal();
 }
 
 // dismiss cal tip on outside tap
