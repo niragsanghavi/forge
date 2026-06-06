@@ -1251,20 +1251,12 @@ async function saveRoles(){
         const t=document.getElementById(`team_${p.name}`)?.value;
         const r=document.getElementById(`role_${p.name}`)?.value;
         if(t) p.team=t;
-        if(r) p.role=r;                               // players with no input row (e.g. just joined) are left untouched
+        if(r) p.role=r;                               // players with no input row are left untouched
       });
       tx.update(ref,{roster});
       written=roster;
     });
     if(written){ season.roster=written; const fresh=written.find(p=>p.name===me.name); if(fresh) me=fresh; }
-    upsertSession(groupCode, me, groupData?.name);
-    renderAdminRoles(); refresh();
-    alert('✅ Roles saved');
-  } catch(e){ logErr('saveRoles', e); alert('❌ Save failed — check connection: '+e.message); }
-}
-  try {
-    await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).update({roster});
-    season.roster=roster;
     upsertSession(groupCode, me, groupData?.name);
     renderAdminRoles(); refresh();
     alert('✅ Roles saved');
