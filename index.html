@@ -611,7 +611,7 @@ async function submitNewPin(){
       groupData.players = newGroupPlayers;
       season.roster = newSeasonRoster;
       me = newPlayerObj;
-      upsertSession(groupCode, newPlayerObj, groupData?.name);
+      upsertSession(groupCode, entry, groupData?.name);
     } else if(flow.mode === 'grace'){
       // Existing player setting a PIN for the first time. Patch their roster entry.
       const roster = JSON.parse(JSON.stringify(season.roster||[]));
