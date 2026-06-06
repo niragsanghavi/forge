@@ -393,7 +393,10 @@ function getRandomComeback(){ return COMEBACK_MSGS[Math.floor(Math.random()*COME
 // plus the active group's code. No cross-device identity (deferred) — each
 // device joins each group independently.
 const MAX_GROUPS = 3;
-function getSessions(){ try { return JSON.parse(localStorage.getItem('forge_sessions')||'[]'); } catch(e){ return []; } }
+// One place to surface errors. Logs a tagged, searchable line to the browser
+// console (DevTools) so a failure leaves a trace instead of vanishing.
+function logErr(where, e){ console.error('[Forge] '+where, e); }
+function getSessions(){ try { return JSON.parse(localStorage.getItem('forge_sessions')||'[]'); } catch(e){ logErr('getSessions: bad localStorage', e); return []; } }
 function saveSessions(list){ localStorage.setItem('forge_sessions', JSON.stringify(list)); }
 function getActiveCode(){ return localStorage.getItem('forge_active'); }
 function setActiveCode(code){ localStorage.setItem('forge_active', code); }
@@ -415,7 +418,7 @@ function removeSession(code){
 function migrateLegacySession(){
   const legacy = localStorage.getItem('forge_session');
   if(legacy && getSessions().length===0){
-    try { const s = JSON.parse(legacy); if(s && s.code && s.player){ saveSessions([{code:s.code, player:s.player, name:s.code}]); setActiveCode(s.code); } } catch(e){}
+    try { const s = JSON.parse(legacy); if(s && s.code && s.player){ saveSessions([{code:s.code, player:s.player, name:s.code}]); setActiveCode(s.code); } } catch(e){ logErr('migrateLegacySession', e); }
   }
   localStorage.removeItem('forge_session');
 }
@@ -1003,7 +1006,7 @@ async function submitLog(){
       try {
         const gSnap = await db.collection('groups').doc(sess.code).get();
         if(gSnap.exists && gSnap.data().currentSeasonId === seasonId) targets.push(sess);
-      } catch(e){ /* unreadable group — skip, never block the log */ }
+      } catch(e){ logErr('submitLog: skipped unreadable group '+sess.code, e); /* never block the log */ }
     }));
 
     const batch = db.batch();
@@ -1226,7 +1229,7 @@ async function saveRoles(){
     upsertSession(groupCode, me, groupData?.name);
     renderAdminRoles(); refresh();
     alert('✅ Roles saved');
-  } catch(e){ alert('❌ Save failed — check connection: '+e.message); }
+  } catch(e){ logErr('saveRoles', e); alert('❌ Save failed — check connection: '+e.message); }
 }
 
 function renderTwistToggles(){
@@ -1271,7 +1274,7 @@ async function renderTrendCharts(groups){
     const reg=groups.reduce((s,g)=>s+(g.players?.length||0),0)||1;
     const snap=await db.collection('logs').get();
     const dp={}; snap.docs.forEach(dn=>{const l=dn.data(); if(l.month===M&&l.year===Y)(dp[l.day]=dp[l.day]||new Set()).add(l.player);});
-    let base=null; try{const b=await db.collection('analytics').doc('baseline-2026-04').get(); if(b.exists) base=b.data();}catch(e){}
+    let base=null; try{const b=await db.collection('analytics').doc('baseline-2026-04').get(); if(b.exists) base=b.data();}catch(e){ logErr('renderTrendCharts: baseline read', e); }
     _trend={reg,dp,base,today:(now.getMonth()+1===M?now.getDate():31)};
     el.innerHTML=
       '<div style="display:flex;gap:6px;margin-bottom:10px">'+
