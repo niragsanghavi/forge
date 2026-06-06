@@ -1261,7 +1261,8 @@ async function award30(){
 }
 
 // Super-admin engagement trends: active people/day + participation rate,
-// current month (all groups, live) overlaid with the Apr baseline doc.
+// Super-admin engagement trends with a day-window toggle (7 / 14 / All).
+let _trend=null, _trendWin='all', _trendCharts=[];
 async function renderTrendCharts(groups){
   const el=document.getElementById('trendCharts'); if(!el||typeof Chart==='undefined') return;
   el.innerHTML='<div class="tmuted">Loading trends…</div>';
@@ -1271,23 +1272,36 @@ async function renderTrendCharts(groups){
     const snap=await db.collection('logs').get();
     const dp={}; snap.docs.forEach(dn=>{const l=dn.data(); if(l.month===M&&l.year===Y)(dp[l.day]=dp[l.day]||new Set()).add(l.player);});
     let base=null; try{const b=await db.collection('analytics').doc('baseline-2026-04').get(); if(b.exists) base=b.data();}catch(e){}
-    const days=Array.from({length:31},(_,i)=>i+1);
-    const ca=days.map(d=>dp[d]?dp[d].size:null);
-    const cp=days.map(d=>dp[d]?Math.round(dp[d].size/reg*100):null);
-    const br=base?.registered||1;
-    const ba=base?days.map(d=>base.daily[d]??null):null;
-    const bp=base?days.map(d=>base.daily[d]!=null?Math.round(base.daily[d]/br*100):null):null;
-    el.innerHTML='<div class="card" style="margin:0 0 12px"><div class="card-title">Active people / day</div><canvas id="chA" height="170"></canvas></div><div class="card" style="margin:0"><div class="card-title">Participation rate</div><canvas id="chP" height="170"></canvas></div>';
-    const lbl=base?.label||'Baseline';
-    const mk=(id,cur,bse,sfx)=>new Chart(document.getElementById(id),{type:'line',data:{labels:days,datasets:[
-      {label:'This month',data:cur,borderColor:'#f59e0b',backgroundColor:'#f59e0b',spanGaps:true,tension:.3},
-      ...(bse?[{label:lbl,data:bse,borderColor:'#6b7280',borderDash:[5,4],spanGaps:true,tension:.3}]:[])
-    ]},options:{responsive:true,plugins:{legend:{labels:{color:'#9ca3af',boxWidth:12}}},scales:{x:{ticks:{color:'#6b7280',maxTicksLimit:10}},y:{beginAtZero:true,ticks:{color:'#6b7280',callback:v=>v+(sfx||'')}}}}});
-    mk('chA',ca,ba,''); mk('chP',cp,bp,'%');
+    _trend={reg,dp,base,today:(now.getMonth()+1===M?now.getDate():31)};
+    el.innerHTML=
+      '<div style="display:flex;gap:6px;margin-bottom:10px">'+
+      [['7','Last 7'],['14','Last 14'],['all','All']].map(([w,t])=>`<button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="setTrendWin('${w}')">${t}</button>`).join('')+
+      '</div>'+
+      '<div class="card" style="margin:0 0 12px"><div class="card-title">Active people / day</div><canvas id="chA" height="170"></canvas></div>'+
+      '<div class="card" style="margin:0"><div class="card-title">Participation rate</div><canvas id="chP" height="170"></canvas></div>';
+    drawTrend();
   }catch(e){console.error('renderTrendCharts',e); el.innerHTML='<div class="tmuted">Could not load trends.</div>';}
 }
+function setTrendWin(w){ _trendWin=w; drawTrend(); }
+function drawTrend(){
+  if(!_trend) return;
+  _trendCharts.forEach(c=>{try{c.destroy();}catch(e){}}); _trendCharts=[];
+  const {reg,dp,base,today}=_trend;
+  let days=Array.from({length:31},(_,i)=>i+1);
+  if(_trendWin!=='all'){ const n=parseInt(_trendWin); days=days.filter(d=>d<=today&&d>today-n); }
+  const ca=days.map(d=>dp[d]?dp[d].size:null);
+  const cp=days.map(d=>dp[d]?Math.round(dp[d].size/reg*100):null);
+  const br=base?.registered||1;
+  const ba=base?days.map(d=>base.daily[d]??null):null;
+  const bp=base?days.map(d=>base.daily[d]!=null?Math.round(base.daily[d]/br*100):null):null;
+  const lbl=base?.label||'Baseline';
+  const mk=(id,cur,bse,sfx)=>_trendCharts.push(new Chart(document.getElementById(id),{type:'line',data:{labels:days,datasets:[
+    {label:'This month',data:cur,borderColor:'#f59e0b',backgroundColor:'#f59e0b',spanGaps:true,tension:.3},
+    ...(bse?[{label:lbl,data:bse,borderColor:'#6b7280',borderDash:[5,4],spanGaps:true,tension:.3}]:[])
+  ]},options:{responsive:true,plugins:{legend:{labels:{color:'#9ca3af',boxWidth:12}}},scales:{x:{ticks:{color:'#6b7280',maxTicksLimit:10}},y:{beginAtZero:true,ticks:{color:'#6b7280',callback:v=>v+(sfx||'')}}}}}));
+  mk('chA',ca,ba,''); mk('chP',cp,bp,'%');
+}
 
-// ── SUPER ADMIN ───────────────────────────────────────────────────────────
 // ── SUPER ADMIN ───────────────────────────────────────────────────────────
 async function loadSuperAdmin(){
   const snap=await db.collection('groups').get();
