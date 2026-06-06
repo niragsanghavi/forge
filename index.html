@@ -733,11 +733,18 @@ function renderGroupSwitcher(){
 // Switch active group: tear down listeners, swap state, CLEAR the old group's
 // painted DOM (so its data can't linger as a ghost while the new group's first
 // snapshot loads), then reload.
+// Switch active group: NULL the season first, swap state, clear stale DOM, reload.
 function switchGroup(code){
   if(code===groupCode) return;
   const s = getSessions().find(x=>x.code===code);
   if(!s) return;
   unsub.forEach(fn=>fn()); unsub = [];
+  // CRITICAL: null season + seasonId BEFORE flipping groupCode. Otherwise there's an
+  // async window where groupCode = new group but `season` still holds the OLD group's
+  // roster — and because groups share a seasonId ("2026-06"), a roster write in that
+  // window (consent toggle / save roles) overwrites the new group's roster with the old
+  // one. Nulled, any such write hits an invalid path and fails harmlessly.
+  season = null; seasonId = null;
   setActiveCode(code);
   groupCode = s.code; me = s.player;
   allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; adminUnlocked=false;
@@ -1182,6 +1189,7 @@ function renderAdminRoles(){
 }
 
 async function saveRoles(){
+  if(!season || !seasonId){ alert('This group is still loading — give it a second and try again.'); return; }
   const roster=JSON.parse(JSON.stringify(season.roster||[]));
   roster.forEach(p=>{
     const t=document.getElementById(`team_${p.name}`)?.value;
@@ -1733,6 +1741,7 @@ function renderGlobalConsent(){
   </div>`;
 }
 async function toggleGlobalConsent(val){
+  if(!season || !seasonId){ return; }
   try{
     const roster=JSON.parse(JSON.stringify(season.roster||[]));
     const entry=roster.find(p=>p.name===me.name);
