@@ -618,33 +618,58 @@ async function submitNewPin(){
 
   const flow = window._pinFlow;
   if(!flow){ err.textContent='Something went wrong. Please refresh.'; err.classList.remove('hidden'); return; }
+  if(!season || !seasonId){ err.textContent='Still loading — try again in a second.'; err.classList.remove('hidden'); return; }
 
   try {
     if(flow.mode === 'register'){
       const newPlayerObj = { name:flow.name, role:flow.role, team:flow.team, pin, uid:(window.currentUid||null) };
-      const newGroupPlayers = [...(groupData.players||[]), {name:flow.name}];
-      const newSeasonRoster = [...(season.roster||[]), newPlayerObj];
-      await db.collection('groups').doc(groupCode).update({ players: newGroupPlayers });
-      await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).update({ roster: newSeasonRoster });
-      groupData.players = newGroupPlayers;
-      season.roster = newSeasonRoster;
-      me = newPlayerObj;
+      const gRef = db.collection('groups').doc(groupCode);
+      const sRef = gRef.collection('seasons').doc(seasonId);
+      let wPlayers=null, wRoster=null;
+      await db.runTransaction(async tx=>{
+        const gSnap=await tx.get(gRef);               // ALL reads first
+        const sSnap=await tx.get(sRef);
+        if(!sSnap.exists) throw new Error('SEASON_MISSING');
+        const players=(gSnap.exists && gSnap.data().players)||[];
+        const roster=sSnap.data().roster||[];
+        if(roster.some(p=>p.name.toLowerCase()===flow.name.toLowerCase())) throw new Error('NAME_TAKEN');  // someone grabbed it during the race
+        players.push({name:flow.name});
+        roster.push(newPlayerObj);
+        tx.update(gRef,{players});                    // then writes
+        tx.update(sRef,{roster});
+        wPlayers=players; wRoster=roster;
+      });
+      groupData.players=wPlayers;
+      season.roster=wRoster;
+      me=newPlayerObj;
       upsertSession(groupCode, newPlayerObj, groupData?.name);
     } else if(flow.mode === 'grace'){
-      // Existing player setting a PIN for the first time. Patch their roster entry.
-      const roster = JSON.parse(JSON.stringify(season.roster||[]));
-      const entry = roster.find(p=>p.name===flow.name);
-      if(!entry){ err.textContent='Could not find your record. Please refresh.'; err.classList.remove('hidden'); return; }
-      entry.pin = pin;
-      entry.uid = (window.currentUid||null);
-      await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).update({ roster });
-      season.roster = roster;
-      me = entry;
-      upsertSession(groupCode, entry, groupData?.name);
+      const sRef = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
+      let wRoster=null, myEntry=null;
+      await db.runTransaction(async tx=>{
+        const sSnap=await tx.get(sRef);
+        if(!sSnap.exists) throw new Error('SEASON_MISSING');
+        const roster=sSnap.data().roster||[];
+        const entry=roster.find(p=>p.name===flow.name);
+        if(!entry) throw new Error('NO_RECORD');
+        entry.pin=pin;
+        entry.uid=(window.currentUid||null);
+        tx.update(sRef,{roster});
+        wRoster=roster; myEntry=entry;
+      });
+      season.roster=wRoster;
+      me=myEntry;
+      upsertSession(groupCode, myEntry, groupData?.name);
     }
     window._pinFlow = null;
     launchApp();
-  } catch(e){ console.error(e); err.textContent='Save failed — check connection.'; err.classList.remove('hidden'); }
+  } catch(e){
+    logErr('submitNewPin '+(flow?.mode||''), e);
+    if(e.message==='NAME_TAKEN'){ err.textContent='That name was just taken by someone else — go back and pick a different one.'; }
+    else if(e.message==='NO_RECORD'){ err.textContent='Could not find your record. Please refresh.'; }
+    else { err.textContent='Save failed — check connection.'; }
+    err.classList.remove('hidden');
+  }
 }
 
 function promptSwitch(){
@@ -1215,14 +1240,28 @@ function renderAdminRoles(){
 
 async function saveRoles(){
   if(!season || !seasonId){ alert('This group is still loading — give it a second and try again.'); return; }
-  const roster=JSON.parse(JSON.stringify(season.roster||[]));
-  roster.forEach(p=>{
-    const t=document.getElementById(`team_${p.name}`)?.value;
-    const r=document.getElementById(`role_${p.name}`)?.value;
-    if(t) p.team=t;
-    if(r) p.role=r;          // absent when roles disabled — role stays as-is (Player)
-    if(me.name===p.name){ me.team=p.team; me.role=p.role; }
-  });
+  const ref = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
+  try {
+    let written=null;
+    await db.runTransaction(async tx=>{
+      const snap=await tx.get(ref);
+      if(!snap.exists) throw new Error('SEASON_MISSING');
+      const roster=snap.data().roster||[];           // FRESH copy — includes anyone who joined while you edited
+      roster.forEach(p=>{
+        const t=document.getElementById(`team_${p.name}`)?.value;
+        const r=document.getElementById(`role_${p.name}`)?.value;
+        if(t) p.team=t;
+        if(r) p.role=r;                               // players with no input row (e.g. just joined) are left untouched
+      });
+      tx.update(ref,{roster});
+      written=roster;
+    });
+    if(written){ season.roster=written; const fresh=written.find(p=>p.name===me.name); if(fresh) me=fresh; }
+    upsertSession(groupCode, me, groupData?.name);
+    renderAdminRoles(); refresh();
+    alert('✅ Roles saved');
+  } catch(e){ logErr('saveRoles', e); alert('❌ Save failed — check connection: '+e.message); }
+}
   try {
     await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).update({roster});
     season.roster=roster;
@@ -1809,16 +1848,23 @@ function renderGlobalConsent(){
 }
 async function toggleGlobalConsent(val){
   if(!season || !seasonId){ return; }
+  const ref = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
   try{
-    const roster=JSON.parse(JSON.stringify(season.roster||[]));
-    const entry=roster.find(p=>p.name===me.name);
-    if(!entry) return;
-    entry.globalConsent=val;
-    await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).update({roster});
-    season.roster=roster; me=entry;
+    let written=null;
+    await db.runTransaction(async tx=>{
+      const snap=await tx.get(ref);
+      if(!snap.exists) throw new Error('SEASON_MISSING');
+      const roster=snap.data().roster||[];          // FRESH copy from server
+      const entry=roster.find(p=>p.name===me.name);
+      if(!entry) throw new Error('NOT_ON_ROSTER');
+      entry.globalConsent=val;
+      tx.update(ref,{roster});                       // atomic write
+      written=roster;
+    });
+    if(written){ season.roster=written; me=written.find(p=>p.name===me.name)||me; }
     upsertSession(groupCode, me, groupData?.name);
     renderGlobalConsent();
-  }catch(e){ console.error(e); alert('Could not update preference — check connection.'); }
+  }catch(e){ logErr('toggleGlobalConsent', e); alert('Could not update preference — check connection.'); renderGlobalConsent(); }
 }
 // ── TABS ──────────────────────────────────────────────────────────────────
 const TABS=['home','log','lb','feed','global','admin'];
