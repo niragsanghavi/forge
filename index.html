@@ -238,6 +238,8 @@
     <div class="shdr">Overview</div>
     <div id="superDashboard"></div>
     <div id="rolloverNudge" style="margin-top:12px"></div>
+    <div class="shdr" style="margin-top:20px">Engagement Trend</div>
+    <div id="trendCharts"></div>
 
     <div class="shdr" style="margin-top:20px">All Groups</div>
     <div id="superGroupList"></div>
@@ -316,6 +318,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="src/config/firebase.js"></script>
 <script src="src/state/appState.js"></script>
 <script src="src/services/scoringEngine.js"></script>
@@ -490,7 +493,7 @@ async function verifyCode(){
 function buildPlayerPicker(players){
   document.getElementById('obgrid').innerHTML = players.map(p=>`
     <div class="pbtn" onclick="choosePlayer('${p.name}')">
-      <div class="pname">${p.name}</div>
+      <div class="pname">${esc(p.name)}</div>
       <div class="prole">${p.role}</div>
       <div class="pteam t${p.team}">Team ${p.team}</div>
     </div>`).join('');
@@ -940,12 +943,12 @@ function getNudgeHTML(playerName,sc){
       return `<div class="nudge"><div class="nudge-icon">👑</div><div class="nudge-text">You're the only one here so far. Top spot's yours by default — invite the others and defend it.</div></div>`;
     }
     const gap=myPts-second.pts;
-    return `<div class="nudge"><div class="nudge-icon">👑</div><div class="nudge-text">You're leading the pack. <strong>${second.name}</strong> is ${gap} pts behind. Don't get comfortable.</div></div>`;
+    return `<div class="nudge"><div class="nudge-icon">👑</div><div class="nudge-text">You're leading the pack. <strong>${esc(second.name)}</strong> is ${gap} pts behind. Don't get comfortable.</div></div>`;
   }
   const ahead=sorted[myIdx-1];
   const gap=ahead.pts-myPts;
   const needed=Math.ceil(gap/5);
-  return `<div class="nudge"><div class="nudge-icon">⚡</div><div class="nudge-text">You're <strong>${gap} pts behind ${ahead.name}</strong>. ${needed} workout${needed>1?'s':''} and you overtake them.</div></div>`;
+  return `<div class="nudge"><div class="nudge-icon">⚡</div><div class="nudge-text">You're <strong>${gap} pts behind ${esc(ahead.name)}</strong>. ${needed} workout${needed>1?'s':''} and you overtake them.</div></div>`;
 }
 
 // ── LOG ───────────────────────────────────────────────────────────────────
@@ -972,7 +975,7 @@ function goS2(){
 function buildChips(){
   const mine=[...new Set(allLogs.filter(l=>l.player===me.name).flatMap(l=>l.workouts||[l.workout]).filter(Boolean))];
   const all=[...new Set([...mine,...COMMON_WORKOUTS])];
-  document.getElementById('wChips').innerHTML=all.map(w=>`<div class="chip${mine.includes(w)?' mine':''}" onclick="toggleChip(this,'${w.replace(/'/g,"\\'")}')">${w}</div>`).join('');
+  document.getElementById('wChips').innerHTML=all.map(w=>`<div class="chip${mine.includes(w)?' mine':''}" onclick="toggleChip(this,'${w.replace(/'/g,"\\'")}')">${esc(w)}</div>`).join('');
 }
 function toggleChip(el,w){ el.classList.toggle('sel'); if(el.classList.contains('sel')){if(!selW.includes(w))selW.push(w);}else{selW=selW.filter(x=>x!==w);} updateSel(); updBtn(); }
 function addCustom(){
@@ -1062,9 +1065,9 @@ function renderLB(){
   document.getElementById('indLb').innerHTML=ind.map((p,i)=>`
     <div class="lbrow" style="${p.name===myName?'background:rgba(245,158,11,0.06);margin:0 -16px;padding:12px 16px;border-radius:8px':''}">
       <div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div>
-      <div style="width:34px;height:34px;border-radius:50%;background:${p.team==='A'?'var(--Al)':p.team==='B'?'var(--Bl)':'var(--Cl)'};border:1.5px solid ${tcol(p.team)};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:${tcol(p.team)};flex-shrink:0">${p.name[0]}</div>
+      <div style="width:34px;height:34px;border-radius:50%;background:${p.team==='A'?'var(--Al)':p.team==='B'?'var(--Bl)':'var(--Cl)'};border:1.5px solid ${tcol(p.team)};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:${tcol(p.team)};flex-shrink:0">${esc(p.name[0])}</div>
       <div class="lbinfo">
-        <div class="lbname">${p.name}${p.name===myName?' <span style="font-size:10px;color:var(--green);font-weight:700">· you</span>':''} <span class="rbadge ${p.role==='Captain'?'rCaptain':p.role==='Vice Captain'?'rVC':'rPlayer'}">${p.role}</span></div>
+        <div class="lbname">${esc(p.name)}${p.name===myName?' <span style="font-size:10px;color:var(--green);font-weight:700">· you</span>':''} <span class="rbadge ${p.role==='Captain'?'rCaptain':p.role==='Vice Captain'?'rVC':'rPlayer'}">${p.role}</span></div>
         <div class="lbmeta">${p.sc.wo} workouts · ${p.sc.streak}🔥</div>
       </div>
       <div style="text-align:right">
@@ -1076,7 +1079,7 @@ function renderLB(){
   const my=score(me.name);
   const pl=(season.roster||[]).find(p=>p.name===me.name)||me;
   document.getElementById('ptsBk').innerHTML=`
-    <div class="card-title">Your breakdown — ${me.name}</div>
+    <div class="card-title">Your breakdown — ${esc(me.name)}</div>
     ${[
       ['Base points',my.base,`${my.wo} workouts × 5`],
       ['Perfect week',my.wb,'+10 per complete Mon–Sun week'],
@@ -1142,10 +1145,10 @@ function renderFeed(){
     const alreadyFlagged=flags.some(f=>f.logId===l.id&&f.flaggedBy===me.name);
     const isBacklog=l.day<todayDay&&ts&&ts.toDateString()===now.toDateString();
     return `<div class="fi">
-      <div class="fav" style="background:${tbg(ct)};color:${tcol(ct)};border:1.5px solid ${tcol(ct)}">${l.player[0]}</div>
+      <div class="fav" style="background:${tbg(ct)};color:${tcol(ct)};border:1.5px solid ${tcol(ct)}">${esc(l.player[0])}</div>
       <div class="ftxt">
-        <div class="fn">${l.player} <span style="font-size:10px;color:${tcol(ct)};font-weight:600">Team ${ct}</span>${flagCount>=2?'<span class="pill" style="background:var(--red-l);color:var(--red);margin-left:6px">⚑ flagged</span>':''}</div>
-        <div class="fw">💪 ${w}</div>
+        <div class="fn">${esc(l.player)} <span style="font-size:10px;color:${tcol(ct)};font-weight:600">Team ${ct}</span>${flagCount>=2?'<span class="pill" style="background:var(--red-l);color:var(--red);margin-left:6px">⚑ flagged</span>':''}</div>
+        <div class="fw">💪 ${esc(w)}</div>
         <div class="ft">${tstr} · <span style="color:var(--muted)">Day ${l.day}</span>${isBacklog?' <span style="background:var(--orange-l);color:var(--orange);font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:4px">backlog</span>':''}</div>
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0;align-items:center">
@@ -1173,9 +1176,9 @@ function renderFlagQueue(){
     const log=allLogs.find(l=>l.id===logId); if(!log) return '';
     const w=Array.isArray(log.workouts)?log.workouts.join(', '):(log.workout||'');
     return `<div class="flag-item">
-      <div style="font-size:13px;font-weight:600">${log.player} · Day ${log.day}</div>
-      <div style="font-size:12px;color:var(--muted);margin:3px 0">${w}</div>
-      <div style="font-size:11px;color:var(--red);margin-bottom:8px">Flagged by ${fs.map(f=>f.flaggedBy).join(', ')}</div>
+      <div style="font-size:13px;font-weight:600">${esc(log.player)} · Day ${log.day}</div>
+      <div style="font-size:12px;color:var(--muted);margin:3px 0">${esc(w)}</div>
+      <div style="font-size:11px;color:var(--red);margin-bottom:8px">Flagged by ${fs.map(f=>esc(f.flaggedBy)).join(', ')}</div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-surface btn-sm" onclick="resolveFlag('${logId}','keep')">✅ Keep</button>
         <button class="btn btn-red btn-sm" onclick="resolveFlag('${logId}','remove')">🗑 Remove</button>
@@ -1197,7 +1200,7 @@ function renderAdminRoles(){
   const cols=rolesOn?'1fr 80px 130px':'1fr 80px';
   document.getElementById('adminRoles').innerHTML=players.map(p=>`
     <div style="display:grid;grid-template-columns:${cols};gap:6px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
-      <span style="font-size:13px;font-weight:600">${p.name}</span>
+      <span style="font-size:13px;font-weight:600">${esc(p.name)}</span>
       <select id="team_${p.name}" style="padding:6px;font-size:12px;margin-bottom:0">
         ${teamOpts.map(t=>`<option value="${t}"${p.team===t?' selected':''}>Team ${t}</option>`).join('')}
       </select>
@@ -1257,6 +1260,33 @@ async function award30(){
   alert(`✅ +50 pts awarded to ${p}`);
 }
 
+// Super-admin engagement trends: active people/day + participation rate,
+// current month (all groups, live) overlaid with the Apr baseline doc.
+async function renderTrendCharts(groups){
+  const el=document.getElementById('trendCharts'); if(!el||typeof Chart==='undefined') return;
+  el.innerHTML='<div class="tmuted">Loading trends…</div>';
+  try{
+    const now=new Date(), M=now.getMonth()+1, Y=now.getFullYear();
+    const reg=groups.reduce((s,g)=>s+(g.players?.length||0),0)||1;
+    const snap=await db.collection('logs').get();
+    const dp={}; snap.docs.forEach(dn=>{const l=dn.data(); if(l.month===M&&l.year===Y)(dp[l.day]=dp[l.day]||new Set()).add(l.player);});
+    let base=null; try{const b=await db.collection('analytics').doc('baseline-2026-04').get(); if(b.exists) base=b.data();}catch(e){}
+    const days=Array.from({length:31},(_,i)=>i+1);
+    const ca=days.map(d=>dp[d]?dp[d].size:null);
+    const cp=days.map(d=>dp[d]?Math.round(dp[d].size/reg*100):null);
+    const br=base?.registered||1;
+    const ba=base?days.map(d=>base.daily[d]??null):null;
+    const bp=base?days.map(d=>base.daily[d]!=null?Math.round(base.daily[d]/br*100):null):null;
+    el.innerHTML='<div class="card" style="margin:0 0 12px"><div class="card-title">Active people / day</div><canvas id="chA" height="170"></canvas></div><div class="card" style="margin:0"><div class="card-title">Participation rate</div><canvas id="chP" height="170"></canvas></div>';
+    const lbl=base?.label||'Baseline';
+    const mk=(id,cur,bse,sfx)=>new Chart(document.getElementById(id),{type:'line',data:{labels:days,datasets:[
+      {label:'This month',data:cur,borderColor:'#f59e0b',backgroundColor:'#f59e0b',spanGaps:true,tension:.3},
+      ...(bse?[{label:lbl,data:bse,borderColor:'#6b7280',borderDash:[5,4],spanGaps:true,tension:.3}]:[])
+    ]},options:{responsive:true,plugins:{legend:{labels:{color:'#9ca3af',boxWidth:12}}},scales:{x:{ticks:{color:'#6b7280',maxTicksLimit:10}},y:{beginAtZero:true,ticks:{color:'#6b7280',callback:v=>v+(sfx||'')}}}}});
+    mk('chA',ca,ba,''); mk('chP',cp,bp,'%');
+  }catch(e){console.error('renderTrendCharts',e); el.innerHTML='<div class="tmuted">Could not load trends.</div>';}
+}
+
 // ── SUPER ADMIN ───────────────────────────────────────────────────────────
 // ── SUPER ADMIN ───────────────────────────────────────────────────────────
 async function loadSuperAdmin(){
@@ -1268,6 +1298,7 @@ async function loadSuperAdmin(){
 
   // ── Rollover nudge: if any active season's month has ended/is last day ──
   checkRolloverNudges(groups);
+  renderTrendCharts(groups);
 
   document.getElementById('superGroupList').innerHTML=groups.length===0
     ?'<div class="tmuted">No groups yet</div>'
@@ -1275,7 +1306,7 @@ async function loadSuperAdmin(){
       <div class="admin-group-card">
         <div class="row" onclick="superViewGroup('${g.code}')" style="cursor:pointer">
           <div>
-            <div style="font-size:15px;font-weight:700">${g.name}</div>
+            <div style="font-size:15px;font-weight:700">${esc(g.name)}</div>
             <div style="font-size:12px;color:var(--muted);margin-top:3px">${g.players?.length||0} players · current season ${g.currentSeasonId||'—'}</div>
           </div>
           <div style="font-size:20px;font-weight:800;letter-spacing:3px;color:var(--gold)">${g.code}</div>
@@ -1705,7 +1736,7 @@ async function loadGlobal(){
       .sort((a,b)=>b.count-a.count).slice(0,5);
     actEl.innerHTML = activeRanked.length===0
       ? '<div class="tmuted">No workouts logged anywhere yet today.</div>'
-      : activeRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${g.name}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--green)">${g.count}</div><div style="font-size:10px;color:var(--muted)">logs today</div></div></div>`).join('');
+      : activeRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(g.name)}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--green)">${g.count}</div><div style="font-size:10px;color:var(--muted)">logs today</div></div></div>`).join('');
 
     // Score every group's active season once → group aggregates + consented players
     const groupAgg=[];
@@ -1738,14 +1769,14 @@ async function loadGlobal(){
     const grpRanked=groupAgg.sort((a,b)=>b.avg-a.avg).slice(0,5);
     grpEl.innerHTML = grpRanked.length===0
       ? '<div class="tmuted">No groups yet.</div>'
-      : grpRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${g.name}</div><div class="lbmeta">${g.count} players · ${g.total} total pts</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${g.avg}</div><div style="font-size:10px;color:var(--muted)">avg/player</div></div></div>`).join('');
+      : grpRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(g.name)}</div><div class="lbmeta">${g.count} players · ${g.total} total pts</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${g.avg}</div><div style="font-size:10px;color:var(--muted)">avg/player</div></div></div>`).join('');
 
     // Individual points — opt-in only
     playerEntries.sort((a,b)=>b.points-a.points);
     const top=playerEntries.slice(0,5);
     ptsEl.innerHTML = top.length===0
       ? '<div class="tmuted">No one has opted in yet. Turn on "Show me on the global leaderboard" on your Home screen to appear here.</div>'
-      : top.map((e,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${e.name}</div><div class="lbmeta">${e.group}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${e.points}</div><div style="font-size:10px;color:var(--muted)">pts</div></div></div>`).join('');
+      : top.map((e,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(e.name)}</div><div class="lbmeta">${esc(e.group)}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${e.points}</div><div style="font-size:10px;color:var(--muted)">pts</div></div></div>`).join('');
   }catch(e){ console.error('loadGlobal failed:',e); actEl.innerHTML='<div class="tmuted">Could not load global stats. Check connection.</div>'; grpEl.innerHTML=''; ptsEl.innerHTML=''; }
 }
 
