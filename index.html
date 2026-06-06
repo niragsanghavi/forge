@@ -373,6 +373,14 @@ const COMEBACK_MSGS = [
   "Rest days are healthy. Several in a row is a lifestyle choice. Welcome back.",
 ];
 
+// HTML-escape any user-supplied string before it goes into innerHTML. Turns
+// < > & " ' into harmless entities so a malicious name/workout can never run
+// as markup. (Wired into the display sites in the next step.)
+function esc(s){
+  return String(s==null?'':s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 function getDailyFact(){ return DAILY_FACTS[(new Date().getDate()-1)%DAILY_FACTS.length]; }
 function getStreakMsg(s){ const keys=Object.keys(STREAK_MSGS).map(Number).sort((a,b)=>b-a); for(const k of keys){if(s>=k)return STREAK_MSGS[k];} return null; }
 function getRandomComeback(){ return COMEBACK_MSGS[Math.floor(Math.random()*COMEBACK_MSGS.length)]; }
@@ -572,6 +580,10 @@ async function registerAndJoin(){
   if(!name){ alert('Please enter a name!'); return; }
   // Standardise: first letter of each word upper, rest lower ("RISHIL" -> "Rishil")
   const formattedName = name.split(' ').filter(Boolean).map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
+  // Validate: length + safe characters only. Blocks XSS payloads (which need
+  // < > or quotes) and names that would break inline click handlers.
+  if(formattedName.length < 2 || formattedName.length > 24){ alert('Name must be 2–24 characters.'); return; }
+  if(/[^\p{L}\p{N} .\-]/u.test(formattedName)){ alert('Name can only contain letters, numbers, spaces, hyphens and periods — no symbols.'); return; }
   // Name must be unique within this group's roster (case-insensitive)
   const existing = (season.roster||[]).find(p=>p.name.toLowerCase()===formattedName.toLowerCase());
   if(existing){ alert(`The name "${formattedName}" is already taken in this group. Please use a different name (e.g. add your surname or initial).`); return; }
@@ -963,7 +975,14 @@ function buildChips(){
   document.getElementById('wChips').innerHTML=all.map(w=>`<div class="chip${mine.includes(w)?' mine':''}" onclick="toggleChip(this,'${w.replace(/'/g,"\\'")}')">${w}</div>`).join('');
 }
 function toggleChip(el,w){ el.classList.toggle('sel'); if(el.classList.contains('sel')){if(!selW.includes(w))selW.push(w);}else{selW=selW.filter(x=>x!==w);} updateSel(); updBtn(); }
-function addCustom(){ const inp=document.getElementById('custInp'); const v=inp.value.trim(); if(!v)return; if(!selW.includes(v))selW.push(v); inp.value=''; updateSel(); updBtn(); }
+function addCustom(){
+  const inp=document.getElementById('custInp');
+  const v=inp.value.trim().slice(0,30);   // cap length at 30
+  if(!v) return;
+  if(/[<>"'\\]/.test(v)){ alert('Workout name can\'t contain these characters: < > " \' \\'); return; }
+  if(!selW.includes(v)) selW.push(v);
+  inp.value=''; updateSel(); updBtn();
+}
 function updateSel(){ const w=document.getElementById('selPrev'),l=document.getElementById('selList'); if(selW.length===0){w.classList.add('hidden');return;} w.classList.remove('hidden'); l.textContent=selW.join(' · '); }
 function updBtn(){ document.getElementById('subBtn').disabled=selW.length===0; }
 
