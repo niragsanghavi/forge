@@ -2,9 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <title>Forge</title>
 <link rel="stylesheet" href="src/style/main.css">
+<meta name="theme-color" content="#0a0a0d">
+<link rel="manifest" href="manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Forge">
+<link rel="apple-touch-icon" href="icon-180.png">
 </head>
 <body>
 
@@ -72,23 +79,27 @@
   </nav>
   <div id="groupSwitcher" class="group-switcher" style="display:none"></div>
   <div class="tabs">
-    <div class="tab active" onclick="showTab('home')">Home</div>
-    <div class="tab" onclick="showTab('log')">Log</div>
-    <div class="tab" onclick="showTab('lb')">Board</div>
-    <div class="tab" onclick="showTab('feed')">Feed</div>
-    <div class="tab" onclick="showTab('global')">Global</div>
-    <div class="tab" onclick="showTab('admin')">Admin</div>
+    <div class="tab-pill" id="tabPill"></div>
+    <div class="tab active" onclick="showTab('home')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg><span>Home</span></div>
+    <div class="tab" onclick="showTab('log')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg><span>Log</span></div>
+    <div class="tab" onclick="showTab('lb')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 20v-6M12 20V8M18 20v-10"/><path d="M3 20h18"/></svg><span>Board</span></div>
+    <div class="tab" onclick="showTab('feed')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg><span>Feed</span></div>
+    <div class="tab" onclick="showTab('global')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.7 2.7 2.7 15.3 0 18M12 3c-2.7 2.7-2.7 15.3 0 18"/></svg><span>Global</span></div>
+    <div class="tab" onclick="showTab('admin')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg><span>Admin</span></div>
+    <div class="tab" id="pledgeTab" onclick="showTab('pledge')" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg><span>Pledge</span></div>
   </div>
 
   <!-- HOME -->
   <div class="page active" id="page-home">
-    <div style="padding:8px 0 14px">
-      <div style="font-size:22px;font-weight:800" id="hGreet"></div>
-      <div style="font-size:13px;color:var(--muted);margin-top:3px" id="hDate"></div>
+    <div style="padding:12px 0 16px">
+      <div style="font-size:28px;font-weight:800;letter-spacing:-.022em;line-height:1.15" id="hGreet"></div>
+      <div style="font-size:13px;color:var(--muted);margin-top:4px" id="hDate"></div>
     </div>
-    <div id="factCard"></div>
     <div id="heroCard"></div>
+    <div id="pledgeStatusCard"></div>
+    <div id="goalRingCard"></div>
     <div id="nudgeCard"></div>
+    <div id="factCard"></div>
     <div id="streakCardHighlight"></div>
     <div id="roleBar"></div>
     <div class="srow" id="hStats"></div>
@@ -107,12 +118,14 @@
 
   <!-- LOG -->
   <div class="page" id="page-log">
-    <div style="padding:8px 0 14px;font-size:20px;font-weight:800">Log Workout</div>
+    <div class="page-title">Log Workout</div>
     <div id="ls1">
-      <div class="card-title">Which day?</div>
-      <button class="btn btn-gold" onclick="pickDay('today')">Today</button>
-      <button class="btn btn-surface" onclick="showPicker()">Another day</button>
-      <div id="pickerWrap" class="hidden" style="margin-top:8px">
+      <div class="card-title" style="margin-bottom:10px">Which day?</div>
+      <div id="dayStrip"></div>
+      <div style="text-align:center;margin-top:2px">
+        <span onclick="showPicker()" style="font-size:12px;color:var(--accent);cursor:pointer;opacity:.8">Earlier date?</span>
+      </div>
+      <div id="pickerWrap" class="hidden" style="margin-top:10px">
         <input type="date" id="dpick" onchange="pickDayFromInput()">
       </div>
     </div>
@@ -125,7 +138,7 @@
         <button class="btn btn-surface btn-sm" onclick="backToS1()">Change</button>
       </div>
       <div class="card-title">What did you do? <span style="color:var(--muted);text-transform:none;font-weight:400;font-size:11px">tap multiple</span></div>
-      <div class="chips" id="wChips"></div>
+      <div id="wChips"></div>
       <input type="text" id="custInp" placeholder="Type something new..." onkeydown="if(event.key==='Enter')addCustom()">
       <button class="btn btn-surface btn-sm" onclick="addCustom()" style="margin-bottom:16px">Add</button>
       <div id="selPrev" class="hidden">
@@ -148,7 +161,7 @@
 
   <!-- LEADERBOARD -->
   <div class="page" id="page-lb">
-    <div style="padding:8px 0 14px;font-size:20px;font-weight:800">Leaderboard</div>
+    <div class="page-title">Leaderboard</div>
     <div class="shdr">Team Standings</div>
     <div id="teamStand"></div>
     <div class="shdr">Individual Rankings</div>
@@ -159,13 +172,13 @@
 
   <!-- FEED -->
   <div class="page" id="page-feed">
-    <div style="padding:8px 0 14px;font-size:20px;font-weight:800">Activity Feed</div>
+    <div class="page-title">Activity Feed</div>
     <div class="card" id="feedList"></div>
   </div>
 
   <!-- GLOBAL -->
   <div class="page" id="page-global">
-    <div style="padding:8px 0 4px;font-size:20px;font-weight:800">Global</div>
+    <div class="page-title" style="padding-bottom:4px">Global</div>
     <div class="tmuted" style="margin-bottom:16px;font-size:12px">Across every Forge group</div>
     <div class="shdr">Most Active Groups Today</div>
     <div class="card" id="globalActive"><div class="tmuted">Open this tab to load…</div></div>
@@ -177,7 +190,7 @@
 
   <!-- ADMIN -->
   <div class="page" id="page-admin">
-    <div style="padding:8px 0 4px;font-size:20px;font-weight:800">Admin</div>
+    <div class="page-title" style="padding-bottom:4px">Admin</div>
     <div class="tmuted" style="margin-bottom:16px;font-size:12px">Group admin controls</div>
     <div class="card" id="roleGuideCard">
       <div class="card-title">Role Guide</div>
@@ -214,10 +227,22 @@
       <div class="tmuted" style="margin-bottom:12px">Toggle mechanics for this month.</div>
       <div id="twistToggles"></div>
     </div>
+    <div class="card" id="ironPledgeAdminCard" style="display:none">
+      <div class="card-title" style="color:var(--orange)">⚔️ Iron Pledge — Results</div>
+      <div class="tmuted" style="margin-bottom:12px">Players who locked in a pledge this week. Calculate to apply bonuses and zeroes.</div>
+      <div id="ironPledgeTable"></div>
+      <button class="btn btn-gold" style="margin-top:12px" onclick="calculateIronPledgeResults()">Calculate & Apply Results</button>
+    </div>
     <div class="card">
       <div class="card-title">Flagged Workouts <span id="flagCount" style="color:var(--red)"></span></div>
       <div class="tmuted" style="margin-bottom:12px">Entries flagged by 2+ members.</div>
       <div id="flagQueue"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Foundry Season Goal</div>
+      <div class="tmuted" style="margin-bottom:10px">Override the auto-computed strike target for The Foundry. Leave blank to use the default.</div>
+      <input type="number" id="foundryGoalInput" min="1" placeholder="e.g. 200 (auto if blank)" style="margin-bottom:10px">
+      <button class="btn btn-gold" onclick="saveFoundryGoal()">Save Goal</button>
     </div>
     <div class="card">
       <div class="card-title">Award 30-Day Bonus</div>
@@ -226,6 +251,13 @@
       <button class="btn btn-gold" onclick="award30()">Award +50 Pts</button>
     </div>
   </div>
+
+  <!-- IRON PLEDGE -->
+  <div class="page" id="page-pledge">
+    <div class="page-title">The Iron Pledge</div>
+    <div id="pledgeContent"></div>
+  </div>
+
 </div>
 
 <!-- ══ SUPER ADMIN ══ -->
@@ -312,6 +344,23 @@
         <div id="newGroupResult" class="hidden"></div>
       </div>
     </div>
+
+    <div style="margin-top:24px">
+      <div class="shdr">Tab Analytics</div>
+      <div class="card">
+        <div class="card-title">Click counts by tab</div>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <input id="analyticsGroupCode" placeholder="Group code (e.g. BR0RRU)" style="margin:0;flex:1">
+          <button class="btn btn-surface btn-sm" style="margin:0" onclick="loadTabAnalytics()">Load</button>
+        </div>
+        <div id="tabAnalyticsResult"><div class="tmuted">Enter a group code to load analytics.</div></div>
+        <div class="divider"></div>
+        <div class="card-title">Updates Page Analytics</div>
+        <div class="tmuted" style="margin-bottom:10px">Global (not per-group) — taps and video plays on the public updates page.</div>
+        <button class="btn btn-surface btn-sm" style="margin:0 0 12px" onclick="loadUpdatesAnalytics()">Load Updates Analytics</button>
+        <div id="updatesAnalyticsResult"><div class="tmuted">Tap Load to fetch updates-page analytics.</div></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -388,6 +437,14 @@ function getDailyFact(){ return DAILY_FACTS[(new Date().getDate()-1)%DAILY_FACTS
 function getStreakMsg(s){ const keys=Object.keys(STREAK_MSGS).map(Number).sort((a,b)=>b-a); for(const k of keys){if(s>=k)return STREAK_MSGS[k];} return null; }
 function getRandomComeback(){ return COMEBACK_MSGS[Math.floor(Math.random()*COMEBACK_MSGS.length)]; }
 
+// ISO week string — Monday-start, format "YYYY-W{n}". Used by Jack of All Trades and Iron Pledge.
+function getISOWeek(date){
+  const d=new Date(Date.UTC(date.getFullYear(),date.getMonth(),date.getDate()));
+  d.setUTCDate(d.getUTCDate()+4-(d.getUTCDay()||7));
+  const y=new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  return `${d.getUTCFullYear()}-W${Math.ceil(((d-y)/86400000+1)/7)}`;
+}
+
 // ── SESSION STORE (multi-group) ─────────────────────────────────────────────
 // Device-local multi-session: localStorage holds a LIST of {code, player, name}
 // plus the active group's code. No cross-device identity (deferred) — each
@@ -421,6 +478,18 @@ function migrateLegacySession(){
     try { const s = JSON.parse(legacy); if(s && s.code && s.player){ saveSessions([{code:s.code, player:s.player, name:s.code}]); setActiveCode(s.code); } } catch(e){ logErr('migrateLegacySession', e); }
   }
   localStorage.removeItem('forge_session');
+}
+
+// In-app toast — replaces native alert().  toast('Saved!','success') / toast('Oops','error') / toast('Heads up')
+function toast(msg, type){
+  let host=document.getElementById('toastHost');
+  if(!host){ host=document.createElement('div'); host.id='toastHost'; document.body.appendChild(host); }
+  const t=document.createElement('div');
+  t.className='toast'+(type?' '+type:'');
+  const ic = type==='success'?'✅':type==='error'?'⚠️':'';
+  t.innerHTML=(ic?`<span class="toast-ic">${ic}</span>`:'')+`<span>${esc(msg)}</span>`;
+  host.appendChild(t);
+  setTimeout(()=>{ t.classList.add('out'); setTimeout(()=>t.remove(),240); }, type==='error'?4200:2600);
 }
 
 // ── BOOT ──────────────────────────────────────────────────────────────────
@@ -473,7 +542,7 @@ async function verifyCode(){
   const err = document.getElementById('codeError');
   err.classList.add('hidden');
   try {
-    if(window._joinMode && getSessions().some(s=>s.code===code)){ alert('You\'re already in this group — switching to it.'); switchGroup(code); return; }
+    if(window._joinMode && getSessions().some(s=>s.code===code)){ toast('You\'re already in this group — switching to it.'); switchGroup(code); return; }
     const snap = await db.collection('groups').doc(code).get();
     if(!snap.exists){ err.classList.remove('hidden'); return; }
     groupData = snap.data();
@@ -583,16 +652,16 @@ window._pinEntryFor = null;
 async function registerAndJoin(){
   const nameInput = document.getElementById('newPlayerNameInput');
   const name = nameInput.value.trim();
-  if(!name){ alert('Please enter a name!'); return; }
+  if(!name){ toast('Please enter a name!','error'); return; }
   // Standardise: first letter of each word upper, rest lower ("RISHIL" -> "Rishil")
   const formattedName = name.split(' ').filter(Boolean).map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
   // Validate: length + safe characters only. Blocks XSS payloads (which need
   // < > or quotes) and names that would break inline click handlers.
-  if(formattedName.length < 2 || formattedName.length > 24){ alert('Name must be 2–24 characters.'); return; }
-  if(/[^\p{L}\p{N} .\-]/u.test(formattedName)){ alert('Name can only contain letters, numbers, spaces, hyphens and periods — no symbols.'); return; }
+  if(formattedName.length < 2 || formattedName.length > 24){ toast('Name must be 2–24 characters.','error'); return; }
+  if(/[^\p{L}\p{N} .\-]/u.test(formattedName)){ toast('Name can only contain letters, numbers, spaces, hyphens and periods — no symbols.','error'); return; }
   // Name must be unique within this group's roster (case-insensitive)
   const existing = (season.roster||[]).find(p=>p.name.toLowerCase()===formattedName.toLowerCase());
-  if(existing){ alert(`The name "${formattedName}" is already taken in this group. Please use a different name (e.g. add your surname or initial).`); return; }
+  if(existing){ toast(`The name "${formattedName}" is already taken in this group. Please use a different name (e.g. add your surname or initial).`,'error'); return; }
   const numTeams = season.numTeams === 2 ? 2 : 3;
   const teams = numTeams === 2 ? ['A','B'] : ['A','B','C'];
   const assignedTeam = teams[(season.roster||[]).length % teams.length];
@@ -680,7 +749,7 @@ function promptSwitch(){
     const remaining = removeSession(groupCode);
     const next = remaining[0];
     groupCode = next.code; me = next.player; setActiveCode(next.code);
-    allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; adminUnlocked=false;
+    allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; jackAwards=[]; bets={}; ironPledgeBonuses=[]; twistWindows=[]; adminUnlocked=false;
     showTab('home');
     loadGroup(groupCode, true);
   } else {
@@ -721,7 +790,7 @@ async function loadGroup(code, fromCache){
     launchApp();
   } catch(e){
     console.error('loadGroup failed:', e);
-    alert('Could not load your group — check your connection and try again.');
+    toast('Could not load your group — check your connection and try again.','error');
     if(!getSessions().length){ showScreen('onboard'); showObStep(1); }
   }
 }
@@ -729,11 +798,11 @@ async function loadGroup(code, fromCache){
 // A specific group is gone/broken: drop just its session, fall back to another.
 function handleDeadGroup(code, msg){
   const remaining = removeSession(code);
-  alert(msg + ' Removing it from this device.');
+  toast(msg + ' Removing it from this device.','error');
   if(remaining.length){
     const next = remaining[0];
     groupCode = next.code; me = next.player; setActiveCode(next.code);
-    allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; adminUnlocked=false;
+    allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; jackAwards=[]; bets={}; ironPledgeBonuses=[]; twistWindows=[]; adminUnlocked=false;
     loadGroup(groupCode, true);
   } else {
     showScreen('onboard'); showObStep(1);
@@ -753,10 +822,14 @@ function launchApp(){
     const o = document.createElement('option');
     o.value=p.name; o.textContent=p.name; sel.appendChild(o);
   });
+  setTimeout(()=>updateTabPill('home'),0); // initialize pill after layout
+  initScrollCompression();
   renderAdminRoles();
   renderTwistToggles();
   const rg=document.getElementById('roleGuideCard');
   if(rg) rg.style.display = (season.rolesEnabled!==false) ? '' : 'none';
+  const fgi=document.getElementById('foundryGoalInput');
+  if(fgi) fgi.placeholder=season.foundryGoal?'Current: '+season.foundryGoal+' (edit to change)':'e.g. 200 (auto if blank)';
   subscribe();
 }
 
@@ -790,7 +863,7 @@ function switchGroup(code){
   season = null; seasonId = null;
   setActiveCode(code);
   groupCode = s.code; me = s.player;
-  allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; adminUnlocked=false;
+  allLogs=[]; bonus30=[]; flags=[]; activeTwists={}; jackAwards=[]; bets={}; ironPledgeBonuses=[]; twistWindows=[]; adminUnlocked=false;
   ['heroCard','nudgeCard','streakCardHighlight','roleBar','hStats','twistBanner','calGrid','streakCard','teamStand','indLb','ptsBk','feedList','globalConsentCard'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=''; });
   showTab('home');
   loadGroup(groupCode, true);
@@ -798,7 +871,7 @@ function switchGroup(code){
 
 // Start the flow to join an additional group (max MAX_GROUPS).
 function joinAnotherGroup(){
-  if(getSessions().length >= MAX_GROUPS){ alert(`You can be in up to ${MAX_GROUPS} groups on this device. Leave one (tap your name, top-right) before joining another.`); return; }
+  if(getSessions().length >= MAX_GROUPS){ toast(`You can be in up to ${MAX_GROUPS} groups on this device. Leave one (tap your name, top-right) before joining another.`,'error'); return; }
   window._joinMode = true;
   unsub.forEach(fn=>fn()); unsub = [];
   document.getElementById('codeInput').value='';
@@ -834,9 +907,29 @@ function subscribe(){
     db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('twists')
       .onSnapshot(s=>{ activeTwists={}; s.docs.forEach(d=>{ activeTwists[d.id]=d.data(); }); renderTwistToggles(); refresh(); })
   );
+  // Week-bound twist windows (Boss Week / Underdog Week) — permanent, immutable docs.
+  // Scoring reads THESE, not the toggle state, so toggling never retro-changes scores.
+  unsub.push(
+    db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('twistWindows')
+      .onSnapshot(s=>{ twistWindows=s.docs.map(d=>({id:d.id,...d.data()})); renderTwistToggles(); refresh(); })
+  );
+  // Jack of All Trades awards
+  unsub.push(
+    db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('jackAwards')
+      .onSnapshot(s=>{ jackAwards=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); })
+  );
+  // Iron Pledge: bets (per season) + bonuses_iron_pledge (top-level scoped by groupCode)
+  unsub.push(
+    db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('bets')
+      .onSnapshot(s=>{ bets={}; s.docs.forEach(d=>{ bets[d.id]=d.data(); }); renderPledgeStatusCard(); renderIronPledgePage(); renderIronPledgeAdmin(); })
+  );
+  unsub.push(
+    db.collection('bonuses_iron_pledge').where('groupCode','==',groupCode).where('month','==',season.month).where('year','==',season.year)
+      .onSnapshot(s=>{ ironPledgeBonuses=s.docs.map(d=>({id:d.id,...d.data()})); refresh(); })
+  );
 }
 
-function refresh(){ renderHome(); renderLB(); renderFeed(); renderFlagQueue(); renderGlobalConsent(); }
+function refresh(){ renderHome(); renderLB(); renderFeed(); renderFlagQueue(); renderGlobalConsent(); renderIronPledgePage(); renderIronPledgeAdmin(); }
 
 // ── HOME ──────────────────────────────────────────────────────────────────
 function renderHome(){
@@ -854,31 +947,74 @@ function renderHome(){
   // Daily fact
   document.getElementById('factCard').innerHTML=`<div class="fact-card"><div class="fact-icon">🧠</div><div class="fact-text"><strong>Did you know?</strong> ${getDailyFact()}</div></div>`;
 
-  // Hero card
+  // ── THE STEEL: personal rank + points + competitive sting ──
+  const rosterN=(season.roster||[]).length;
+  const sorted=(season.roster||[]).map(p=>({name:p.name,pts:score(p.name).total})).sort((a,b)=>b.pts-a.pts);
+  const myIdx=sorted.findIndex(p=>p.name===me.name);
+  const rank=myIdx+1;
+  let behindHTML='';
+  if(myIdx>0){
+    const ahead=sorted[myIdx-1];
+    const gap=ahead.pts-sc.total;
+    behindHTML=`<div class="steel-behind">#${rank} of ${rosterN} · <strong>${gap} pts behind ${esc(ahead.name)}</strong></div>`;
+  } else if(rosterN>1){
+    const gap=sc.total-(sorted[1]?.pts||0);
+    behindHTML=`<div class="steel-behind lead">👑 #1 of ${rosterN} · <strong>${gap} pts ahead</strong> — defend it</div>`;
+  } else {
+    behindHTML=`<div class="steel-behind lead">👑 Top spot's yours — invite the squad and defend it</div>`;
+  }
+  // heat (streak) scaling: faster flicker + taller flame as streak grows
+  const st=sc.streak;
+  const fdur=Math.max(0.45,0.95-st*0.05).toFixed(2);
+  const flameScale=Math.min(1.6,0.85+st*0.06).toFixed(2);
+  const cold=st<1;
+  const smsg=getStreakMsg(st);
   document.getElementById('heroCard').innerHTML=`
-    <div class="hero-card">
-      <div class="hero-stripe" style="background:${tc}"></div>
-      <div class="hero-label">Your points</div>
-      <div class="hero-pts" style="color:${tc}">${sc.total}</div>
-      <div class="hero-sub">Rank #${getRank(me.name)} of ${(season.roster||[]).length} · Team ${pl.team}</div>
+    <div class="steel-hero">
+      <span class="steel-rank">⚒️ RANK #${rank} OF ${rosterN}</span>
+      <div class="steel-label">Your steel</div>
+      <div class="steel-pts cu" id="steelPts">${sc.total}<span class="u">pts</span></div>
+      ${behindHTML}
+      <div class="heat-wrap">
+        <div class="flame ${cold?'cold':''}" style="--fdur:${fdur}s;transform:scale(${cold?1:flameScale});transform-origin:center bottom">
+          <i class="f1"></i><i class="f2"></i><i class="f3"></i>
+        </div>
+        <div class="heat-meta">
+          <div class="heat-num ${cold?'cold':''}">${st}<span style="font-size:15px"> day${st===1?'':'s'}</span></div>
+          <div class="heat-cap">${cold?'Fire&#39;s out':'The heat'}</div>
+          <div class="heat-msg">${cold?'Log today to spark it back up.':(smsg||'Keep it lit — don&#39;t let it cool.')}</div>
+        </div>
+      </div>
     </div>`;
 
-  // Nudge card
-  document.getElementById('nudgeCard').innerHTML=getNudgeHTML(me.name,sc);
+  // ── THE FOUNDRY: shared season goal ──
+  const totalStrikes=allLogs.length;
+  const perPerson=(season.minWorkouts||12)+8; // ambition target per member
+  const goal=season.foundryGoal||Math.max(50,rosterN*perPerson);
+  const pct=Math.min(100,Math.round(totalStrikes/goal*100));
+  const ingotN=10;
+  const litN=Math.round(pct/100*ingotN);
+  let ingots='';
+  for(let i=0;i<ingotN;i++){
+    const lit=i<litN;
+    const hgt=28+i*9; // rising staircase monument
+    ingots+=`<div class="ingot ${lit?'molten':''}" style="height:${hgt}px"></div>`;
+  }
+  document.getElementById('nudgeCard').innerHTML=`
+    <div class="foundry-card">
+      <div class="foundry-head">
+        <span class="foundry-title">The Foundry · Season Goal</span>
+        <span class="foundry-trophy">🏆 ${pct}%</span>
+      </div>
+      <div class="ingot-rail">${ingots}</div>
+      <div class="foundry-bar"><div class="foundry-fill" style="width:${pct}%"></div></div>
+      <div class="foundry-stat"><span class="n">${totalStrikes} <span class="g" style="font-size:13px;font-weight:600">/ ${goal} strikes</span></span><span class="g">${Math.max(0,goal-totalStrikes)} to go</span></div>
+      <div class="foundry-sub">Every workout the squad logs is a strike on the anvil. Hit the goal to forge the season trophy.</div>
+    </div>`;
 
-  // Streak highlight card
-  const smsg=getStreakMsg(sc.streak);
-  document.getElementById('streakCardHighlight').innerHTML=sc.streak>=2&&smsg?`
-    <div class="streak-card-highlight">
-      <div class="streak-num">${sc.streak} 🔥</div>
-      <div class="streak-msg">${smsg}</div>
-    </div>`:'';
-
-  // Stats row
-  document.getElementById('hStats').style.gridTemplateColumns='1fr 1fr';
-  document.getElementById('hStats').innerHTML=`
-    <div class="sc"><div class="sv">${sc.wo}</div><div class="sl">WORKOUTS</div></div>
-    <div class="sc"><div class="sv" style="color:var(--orange)">${sc.streak}🔥</div><div class="sl">STREAK</div></div>`;
+  // (steel-hero replaces old streak highlight + stats row)
+  document.getElementById('streakCardHighlight').innerHTML='';
+  document.getElementById('hStats').innerHTML='';
 
   // Role bar
   const {capTarget=16,vcTarget=20,minWorkouts=12,days:DAYS=31,month,year}=season;
@@ -903,12 +1039,12 @@ function renderHome(){
   }
   if(sc.wo<minWorkouts){
     const missing=minWorkouts-sc.wo;
-    rHTML=`<div class="warn-box warn-orange">⚠️ You need ${missing} more workouts to avoid a <strong>${missing*5} pt deduction</strong> on day ${DAYS}</div>`+rHTML;
+    rHTML=`<div class="warn-box warn-red" style="color:var(--red)">⚠️ You need ${missing} more workouts to avoid a <strong>${missing*5} pt deduction</strong> on day ${DAYS}</div>`+rHTML;
   }
   document.getElementById('roleBar').innerHTML=rHTML;
 
-  // Twist banner
-  const activeTwistList=TWIST_LIBRARY.filter(t=>activeTwists[t.id]?.enabled);
+  // Twist banner (Boss/Underdog are window-bound now — not surfaced via the toggle list)
+  const activeTwistList=TWIST_LIBRARY.filter(t=>t.id!=='boss_week'&&t.id!=='underdog_week'&&activeTwists[t.id]?.enabled);
   document.getElementById('twistBanner').innerHTML=activeTwistList.length===0?'':
     `<div class="card" style="border-color:var(--purple)">
       <div style="font-size:12px;font-weight:600;color:var(--purple);margin-bottom:8px">⚡ ACTIVE TWISTS THIS MONTH</div>
@@ -946,6 +1082,115 @@ function renderHome(){
       ?`<div class="tmuted">No days yet. Get ${threshold}+ teammates to log on the same day!</div>`
       :bonusDays.map(d=>`<div class="row" style="padding:6px 0;border-bottom:1px solid var(--border)"><span style="font-size:13px">Day ${d} — ${dc[d].size} members</span><span style="font-size:11px;color:var(--green)">✅ Streak bonus</span></div>`).join('')
     }`;
+
+  renderPledgeStatusCard();
+  renderGoalRing();
+}
+
+// ── PERSONAL MONTHLY GOAL RING ────────────────────────────────────────────
+// Stored entirely in localStorage — never touches Firestore.
+// Key: forge_goal_{groupCode}_{YYYY-MM}
+function _goalKey(){
+  if(!season||!groupCode) return null;
+  return `forge_goal_${groupCode}_${season.year}-${String(season.month).padStart(2,'0')}`;
+}
+function renderGoalRing(){
+  const el=document.getElementById('goalRingCard');
+  if(!el||!season||!me) return;
+  const key=_goalKey(); if(!key) return;
+  const goal=parseInt(localStorage.getItem(key))||0;
+  const sc=score(me.name);
+  const wo=sc.wo;
+
+  if(!goal){
+    el.innerHTML=`<div class="card" style="text-align:center;padding:20px 16px;cursor:pointer" onclick="openGoalInput()">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:8px">No monthly goal set yet.</div>
+      <div style="font-size:28px">🎯</div>
+      <div style="font-size:12px;color:var(--gold);margin-top:8px">Tap to set a goal</div>
+    </div>`;
+    return;
+  }
+
+  const r=44,cx=52,cy=52;
+  const circ=+(2*Math.PI*r).toFixed(2);
+  const pct=Math.min(1,wo/goal);
+  const offset=+(circ*(1-pct)).toFixed(2);
+  const col=pct>=1?'var(--green)':pct>0.6?'var(--gold)':'var(--orange)';
+
+  el.innerHTML=`<div class="card" style="display:flex;align-items:center;gap:16px;padding:16px">
+    <div onclick="openGoalInput()" style="cursor:pointer;flex-shrink:0" title="Tap to change goal">
+      <svg width="104" height="104" viewBox="0 0 104 104">
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--border)" stroke-width="8"/>
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${col}" stroke-width="8"
+          stroke-dasharray="${circ}" stroke-dashoffset="${offset}"
+          stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"
+          style="transition:stroke-dashoffset .8s cubic-bezier(.2,.8,.2,1)"/>
+        <text x="${cx}" y="${cy-4}" text-anchor="middle" dominant-baseline="central"
+          style="fill:var(--text);font-size:18px;font-weight:800;font-family:-apple-system,sans-serif">${wo}</text>
+        <text x="${cx}" y="${cy+14}" text-anchor="middle"
+          style="fill:var(--muted);font-size:10px;font-family:-apple-system,sans-serif">/ ${goal}</text>
+      </svg>
+    </div>
+    <div style="flex:1">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Monthly Goal</div>
+      <div style="font-size:28px;font-weight:800;color:${col}">${Math.round(pct*100)}<span style="font-size:14px;font-weight:600;color:var(--muted)">%</span></div>
+      <div style="font-size:13px;color:var(--muted);margin-top:2px">${Math.max(0,goal-wo)} workout${Math.max(0,goal-wo)===1?'':'s'} to go</div>
+      <div style="font-size:11px;color:var(--gold);margin-top:10px;cursor:pointer" onclick="openGoalInput()">Tap ring to change goal ›</div>
+    </div>
+  </div>
+  <div id="goalInputWrap" class="hidden" style="padding:0 16px 16px;margin-top:-4px">
+    <input type="number" id="goalInput" min="1" max="31" placeholder="Workouts this month (1–31)" style="margin-bottom:8px">
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="closeGoalInput()">Cancel</button>
+      <button class="btn btn-gold btn-sm" style="flex:1;margin:0" onclick="saveGoalInput()">Set Goal</button>
+    </div>
+  </div>`;
+}
+
+function openGoalInput(){
+  const key=_goalKey(); if(!key) return;
+  const goal=parseInt(localStorage.getItem(key))||0;
+  if(!goal){
+    // No goal yet — replace the placeholder card with an inline input form
+    const el=document.getElementById('goalRingCard');
+    if(!el) return;
+    el.innerHTML=`<div class="card" style="padding:16px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:10px">Set your monthly goal</div>
+      <input type="number" id="goalInput" min="1" max="31" placeholder="Workouts this month (1–31)" style="margin-bottom:8px">
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="renderGoalRing()">Cancel</button>
+        <button class="btn btn-gold btn-sm" style="flex:1;margin:0" onclick="saveGoalInput()">Set Goal</button>
+      </div>
+    </div>`;
+    setTimeout(()=>document.getElementById('goalInput')?.focus(),50);
+    return;
+  }
+  const wrap=document.getElementById('goalInputWrap');
+  if(!wrap) return;
+  const isHidden=wrap.classList.contains('hidden');
+  wrap.classList.toggle('hidden',!isHidden);
+  if(isHidden) setTimeout(()=>document.getElementById('goalInput')?.focus(),50);
+}
+
+function closeGoalInput(){
+  document.getElementById('goalInputWrap')?.classList.add('hidden');
+}
+
+function saveGoalInput(){
+  const key=_goalKey(); if(!key) return;
+  const inp=document.getElementById('goalInput');
+  const val=parseInt(inp?.value);
+  if(!val||val<1||val>31){toast('Enter a goal between 1 and 31 workouts.','error');return;}
+  const oldGoal=parseInt(localStorage.getItem(key))||0;
+  localStorage.setItem(key,val);
+  if(oldGoal>0&&val<oldGoal){
+    toast('Setting the bar lower. Efficiency, not defeat.');
+  } else if(oldGoal>0&&val>oldGoal){
+    toast('Raising the bar. Your future self is either grateful or training harder.');
+  } else {
+    toast(`Goal set: ${val} workouts this month.`,'success');
+  }
+  renderGoalRing();
 }
 
 function showCalTip(el,text){
@@ -983,13 +1228,34 @@ function getNudgeHTML(playerName,sc){
 function pickDay(t){
   if(t==='today'){
     const now=new Date();
-    if(now.getMonth()+1!==season.month||now.getFullYear()!==season.year){ alert(`Today is not in the active month (${season.month}/${season.year})`); return; }
+    if(now.getMonth()+1!==season.month||now.getFullYear()!==season.year){ toast(`Today is not in the active month (${season.month}/${season.year})`,'error'); return; }
     selDay=now.getDate();
   }
   goS2();
 }
 function showPicker(){ document.getElementById('pickerWrap').classList.remove('hidden'); }
 function pickDayFromInput(){ const v=document.getElementById('dpick').value; if(!v) return; selDay=new Date(v).getDate(); goS2(); }
+function pickDayFromStrip(day){ selDay=day; goS2(); }
+function buildDayStrip(){
+  const el=document.getElementById('dayStrip');
+  if(!el) return;
+  if(!season){ el.innerHTML=''; return; }
+  const today=new Date();
+  const DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const rows=[];
+  for(let i=6;i>=0;i--){
+    const d=new Date(today); d.setDate(today.getDate()-i);
+    const dayNum=d.getDate();
+    const inSeason=d.getMonth()+1===season.month&&d.getFullYear()===season.year;
+    const isToday=i===0;
+    rows.push(`<div class="day-row${isToday?' today':''}${!inSeason?' disabled':''}" onclick="${inSeason?`pickDayFromStrip(${dayNum})`:''}">
+      <div class="day-row-dow">${DOW[d.getDay()]}</div>
+      <div class="day-row-num">${dayNum}</div>
+      ${isToday?'<div style="font-size:10px;font-weight:700;color:var(--accent);margin-left:auto;text-transform:uppercase;letter-spacing:.06em">Today</div>':''}
+    </div>`);
+  }
+  el.innerHTML=rows.join('');
+}
 function goS2(){
   document.getElementById('ls1').classList.add('hidden');
   document.getElementById('ls2').classList.remove('hidden');
@@ -1000,17 +1266,49 @@ function goS2(){
   document.getElementById('lExisting').textContent=ex.length?`Already logged: ${ex.join(', ')}`:'';
   buildChips(); selW=[]; updateSel(); updBtn();
 }
+const _WO_ICONS={
+  'Gym':`<path d="M4 12h16M6 9v6M18 9v6" stroke-linecap="round"/><rect x="2" y="11" width="4" height="2" rx="1" fill="currentColor" stroke="none"/><rect x="18" y="11" width="4" height="2" rx="1" fill="currentColor" stroke="none"/>`,
+  'Weight training':`<path d="M4 12h16M6 9v6M18 9v6" stroke-linecap="round"/><rect x="2" y="11" width="4" height="2" rx="1" fill="currentColor" stroke="none"/><rect x="18" y="11" width="4" height="2" rx="1" fill="currentColor" stroke="none"/>`,
+  'Strength training':`<path d="M4 12h16M6 9v6M18 9v6" stroke-linecap="round"/><rect x="2" y="11" width="4" height="2" rx="1" fill="currentColor" stroke="none"/><rect x="18" y="11" width="4" height="2" rx="1" fill="currentColor" stroke="none"/>`,
+  'Run':`<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>`,
+  'Walk':`<circle cx="12" cy="5" r="2" fill="currentColor" stroke="none"/><path d="M9 22l2-7 1.5 3 1.5-3 2 7M8 13l4-6 4 6" stroke-linecap="round" stroke-linejoin="round"/>`,
+  'Padel':`<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>`,
+  'Tennis':`<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>`,
+  'Yoga':`<circle cx="12" cy="5" r="2" fill="currentColor" stroke="none"/><path d="M7 13h10M9 10l-2 3M15 10l2 3M9 10h6" stroke-linecap="round" stroke-linejoin="round"/>`,
+  'Cycling':`<circle cx="6" cy="15" r="4"/><circle cx="18" cy="15" r="4"/><path d="M7 9h5l3 6" stroke-linecap="round"/>`,
+  'Spinning':`<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3" stroke-linecap="round"/>`,
+  'Swimming':`<path d="M2 10c2-2 4-2 6 0 2 2 4 2 6 0 2-2 4-2 6 0M2 16c2-2 4-2 6 0 2 2 4 2 6 0 2-2 4-2 6 0" stroke-linecap="round"/>`,
+};
+function _woIcon(w){
+  const c=_WO_ICONS[w]; if(!c) return '';
+  return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">${c}</svg>`;
+}
 function buildChips(){
-  const mine=[...new Set(allLogs.filter(l=>l.player===me.name).flatMap(l=>l.workouts||[l.workout]).filter(Boolean))];
-  const all=[...new Set([...mine,...COMMON_WORKOUTS])];
-  document.getElementById('wChips').innerHTML=all.map(w=>`<div class="chip${mine.includes(w)?' mine':''}" onclick="toggleChip(this,'${w.replace(/'/g,"\\'")}')">${esc(w)}</div>`).join('');
+  const playerLogs=allLogs.filter(l=>l.player===me.name);
+  const freq={};
+  playerLogs.forEach(l=>{ (l.workouts||[l.workout]||[]).filter(Boolean).forEach(w=>{freq[w]=(freq[w]||0)+1;}); });
+  const mine=[...new Set(playerLogs.flatMap(l=>l.workouts||[l.workout]).filter(Boolean))];
+  const hasHistory=Object.keys(freq).length>0;
+  let all=[...new Set([...mine,...COMMON_WORKOUTS])];
+  let featured=[], regular=all;
+  if(hasHistory){
+    all.sort((a,b)=>(freq[b]||0)-(freq[a]||0));
+    const topN=Math.min(3,all.filter(w=>(freq[w]||0)>0).length);
+    featured=all.slice(0,topN);
+    regular=all.slice(topN);
+  }
+  const mkFeat=w=>{const s=w.replace(/'/g,"\\'");return `<div class="workout-feat-card${mine.includes(w)?' mine':''}" onclick="toggleChip(this,'${s}')">${_woIcon(w)}<span>${esc(w)}</span></div>`;};
+  const mkChip=w=>{const s=w.replace(/'/g,"\\'");return `<div class="chip${mine.includes(w)?' mine':''}" onclick="toggleChip(this,'${s}')" style="display:flex;align-items:center;gap:5px">${_woIcon(w)}<span>${esc(w)}</span></div>`;};
+  const featHTML=featured.length?`<div class="workout-feat-grid">${featured.map(mkFeat).join('')}</div>`:'';
+  const chipHTML=`<div class="chips" style="margin-bottom:0">${regular.map(mkChip).join('')}</div>`;
+  document.getElementById('wChips').innerHTML=featHTML+chipHTML;
 }
 function toggleChip(el,w){ el.classList.toggle('sel'); if(el.classList.contains('sel')){if(!selW.includes(w))selW.push(w);}else{selW=selW.filter(x=>x!==w);} updateSel(); updBtn(); }
 function addCustom(){
   const inp=document.getElementById('custInp');
   const v=inp.value.trim().slice(0,30);   // cap length at 30
   if(!v) return;
-  if(/[<>"'\\]/.test(v)){ alert('Workout name can\'t contain these characters: < > " \' \\'); return; }
+  if(/[<>"'\\]/.test(v)){ toast('Workout name can\'t contain these characters: < > " \' \\','error'); return; }
   if(!selW.includes(v)) selW.push(v);
   inp.value=''; updateSel(); updBtn();
 }
@@ -1051,23 +1349,88 @@ async function submitLog(){
     });
     await batch.commit();
 
+    // Jack of All Trades: check after batch lands (uses allLogs + current selW)
+    if(activeTwists['jack_of_all_trades']?.enabled){
+      await checkJackOfAllTrades(selDay, selW);
+    }
+
     const sc=score(me.name);
     const myDays=[...allLogs.filter(l=>l.player===me.name).map(l=>l.day)].sort((a,b)=>a-b);
     const lastDay=myDays.length>=2?myDays[myDays.length-2]:null;
     const isComeback=lastDay&&(selDay-lastDay)>=3;
     document.getElementById('ls2').classList.add('hidden');
     document.getElementById('ls3').classList.remove('hidden');
-    document.getElementById('succTitle').textContent=isComeback?'Welcome Back!':'Forged!';
+    const HYPE=['Forged! 🔨','Beast mode 🔥','Logged & loaded 💪','Another one in the books ✅','Showing up wins 🏆','Crushed it 💥'];
+    document.getElementById('succTitle').textContent = isComeback ? 'Welcome Back!' : HYPE[Math.floor(Math.random()*HYPE.length)];
     const multiNote = targets.length>1 ? ` · posted to ${targets.length} groups` : '';
     document.getElementById('succSub').textContent=`${selW.join(', ')} · Day ${selDay}${multiNote}`;
     const cbMsg=document.getElementById('comebackMsg');
     if(isComeback){cbMsg.textContent=getRandomComeback();cbMsg.classList.remove('hidden');}else{cbMsg.classList.add('hidden');}
-    document.getElementById('succStats').innerHTML=`<div class="srow" style="margin-bottom:0"><div class="sc"><div class="sv">${sc.total}</div><div class="sl">POINTS</div></div><div class="sc"><div class="sv">${sc.wo}</div><div class="sl">WORKOUTS</div></div><div class="sc"><div class="sv" style="color:var(--orange)">${sc.streak}🔥</div><div class="sl">STREAK</div></div></div>`;
-  } catch(e){ console.error('submitLog failed:',e); alert('Error saving. Check connection.'); btn.disabled=false; btn.textContent='Log Workout'; }
+    document.getElementById('succStats').innerHTML=`<div class="srow" style="margin-bottom:0"><div class="sc"><div class="sv cu" id="cuPoints">0</div><div class="sl">POINTS</div></div><div class="sc"><div class="sv cu" id="cuWo">0</div><div class="sl">WORKOUTS</div></div><div class="sc"><div class="sv cu" id="cuStreak" style="color:var(--orange)">0</div><div class="sl">STREAK</div></div></div>`;
+    const si=document.querySelector('#ls3 .succ-icon'); if(si){si.classList.remove('strike-icon');void si.offsetWidth;si.classList.add('strike-icon');}
+    fireSparks();
+    if(navigator.vibrate) navigator.vibrate(200);
+    celebrateLog(sc);
+  } catch(e){ console.error('submitLog failed:',e); toast('Error saving. Check connection.','error'); btn.disabled=false; btn.textContent='Log Workout'; }
 }
 function resetLog(){ selDay=null; selW=[]; ['ls1','ls2','ls3'].forEach((id,i)=>document.getElementById(id).classList[i===0?'remove':'add']('hidden')); document.getElementById('pickerWrap').classList.add('hidden'); showTab('home'); }
 function backToS1(){ document.getElementById('ls1').classList.remove('hidden'); document.getElementById('ls2').classList.add('hidden'); }
 
+function fireSparks(){
+  const n=22;
+  for(let i=0;i<n;i++){
+    const s=document.createElement('div');
+    s.className='spark';
+    const ang=(-Math.PI/2)+(Math.random()-0.5)*1.8;
+    const dist=70+Math.random()*120;
+    s.style.setProperty('--sx',(Math.cos(ang)*dist)+'px');
+    s.style.setProperty('--sy',(Math.sin(ang)*dist)+'px');
+    s.style.setProperty('--sdur',(0.6+Math.random()*0.6)+'s');
+    const c=Math.random();
+    s.style.background=c<0.5?'#ffb01f':c<0.85?'#ff5a1f':'#ffe89a';
+    s.style.left=(window.innerWidth/2)+'px';
+    s.style.top=(window.innerHeight*0.34)+'px';
+    document.body.appendChild(s);
+    setTimeout(()=>s.remove(),1300);
+  }
+}
+// Animate a number from 0 up to its final value (ease-out).
+function countUp(el, to, dur){
+  to = Number(to) || 0;
+  const start = performance.now();
+  (function tick(now){
+    const t = Math.min(1, (now - start) / dur);
+    el.textContent = Math.round(to * (1 - Math.pow(1 - t, 3)));
+    if(t < 1) requestAnimationFrame(tick); else el.textContent = to;
+  })(performance.now());
+}
+
+// Lightweight DOM confetti — no library.
+function fireConfetti(){
+  const colors=['#f59e0b','#22c55e','#ffffff','#fb923c','#fbbf24'];
+  const host=document.createElement('div');
+  host.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:9998;overflow:hidden';
+  document.body.appendChild(host);
+  for(let i=0;i<46;i++){
+    const p=document.createElement('div');
+    const sz=6+Math.random()*6;
+    p.style.cssText=`position:absolute;top:-14px;left:${Math.random()*100}%;width:${sz}px;height:${sz*0.6}px;background:${colors[i%colors.length]};opacity:.95;border-radius:1px;transform:rotate(${Math.random()*360}deg);animation:confFall ${1.1+Math.random()*1.1}s cubic-bezier(.2,.6,.4,1) ${Math.random()*.25}s forwards`;
+    host.appendChild(p);
+  }
+  setTimeout(()=>host.remove(),2700);
+}
+
+// The whole celebration, fired after a successful log.
+function celebrateLog(sc){
+  const ic=document.querySelector('#ls3 .succ-icon');
+  if(ic){ ic.style.animation='none'; void ic.offsetWidth; ic.style.animation='succPop .7s cubic-bezier(.22,1,.36,1)'; }
+  const p=document.getElementById('cuPoints'), w=document.getElementById('cuWo'), s=document.getElementById('cuStreak');
+  if(p) countUp(p, sc.total, 900);
+  if(w) countUp(w, sc.wo, 700);
+  if(s) countUp(s, sc.streak, 700);
+  fireConfetti();
+}
+  
 // ── LEADERBOARD ───────────────────────────────────────────────────────────
 function renderLB(){
   if(!season) return;
@@ -1075,28 +1438,44 @@ function renderLB(){
   const teams=[...new Set(players.map(p=>p.team))];
   const tcol=t=>t==='A'?'var(--A)':t==='B'?'var(--B)':'var(--C)';
   const ts=teams.map(t=>({t,s:teamTotal(t),count:players.filter(p=>p.team===t).length})).sort((a,b)=>b.s-a.s);
-  document.getElementById('teamStand').innerHTML=ts.map((t,i)=>`
-    <div class="tcard ${t.t}">
-      <div>
-        <div class="tcname">#${i+1} Team ${t.t}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:3px">${players.filter(p=>p.team===t.t).map(p=>p.name).join(', ')}</div>
-        <div style="font-size:10px;color:var(--muted);margin-top:2px">${t.count} members · avg score</div>
+  // Ranked standings cards: medal rank, team name, members, avg pts,
+  // and a relative bar showing each team's score vs the leader.
+  const firstS = ts[0]?.s || 1;
+  const medalCols = ['#FFD700','#C0C0C0','#CD7F32'];   // gold, silver, bronze
+  document.getElementById('teamStand').innerHTML=ts.map((t,i)=>{
+    const col = tcol(t.t);
+    const names = players.filter(p=>p.team===t.t).map(p=>esc(p.name)).join(' · ');
+    const pct = Math.max(6, Math.round((t.s/firstS)*100));
+    const lead = i===0;
+    return `<div class="tstand${lead?' lead':''}">
+      <div class="tstand-rank" style="color:${medalCols[i]||'var(--muted)'}">${i+1}</div>
+      <div class="tstand-body">
+        <div class="tstand-top">
+          <span class="tstand-name" style="color:${col}">Team ${t.t}</span>
+          ${lead?'<span class="tstand-crown">Leading</span>':''}
+          <span class="tstand-pts">${t.s}<i>avg pts</i></span>
+        </div>
+        <div class="tstand-bar"><div class="tstand-fill" style="width:${pct}%;background:${col}"></div></div>
+        <div class="tstand-meta">${t.count} member${t.count===1?'':'s'} · ${names}</div>
       </div>
-      <div style="text-align:right">
-        <div style="font-size:26px;font-weight:800;color:${tcol(t.t)}">${t.s}</div>
-        <div style="font-size:10px;color:var(--muted)">avg pts</div>
-      </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
+  const _rankBadge=i=>{
+    if(i===0) return `<svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="9" fill="none" stroke="#FFD700" stroke-width="2"/><text x="10" y="14" text-anchor="middle" fill="#FFD700" font-size="10" font-family="sans-serif">1</text></svg>`;
+    if(i===1) return `<svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="9" fill="none" stroke="#C0C0C0" stroke-width="2"/><text x="10" y="14" text-anchor="middle" fill="#C0C0C0" font-size="10" font-family="sans-serif">2</text></svg>`;
+    if(i===2) return `<svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="9" fill="none" stroke="#CD7F32" stroke-width="2"/><text x="10" y="14" text-anchor="middle" fill="#CD7F32" font-size="10" font-family="sans-serif">3</text></svg>`;
+    return `<div class="lbrank" style="color:var(--text-muted)">${i+1}</div>`;
+  };
   const ind=players.map(p=>({...p,sc:score(p.name)})).sort((a,b)=>b.sc.total-a.sc.total);
   const myName=me.name;
   document.getElementById('indLb').innerHTML=ind.map((p,i)=>`
-    <div class="lbrow" style="${p.name===myName?'background:rgba(245,158,11,0.06);margin:0 -16px;padding:12px 16px;border-radius:8px':''}">
-      <div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div>
+    <div class="lbrow" style="${p.name===myName?'background:rgba(201,168,76,0.06);margin:0 -16px;padding:12px 16px;border-radius:8px':''}">
+      ${_rankBadge(i)}
       <div style="width:34px;height:34px;border-radius:50%;background:${p.team==='A'?'var(--Al)':p.team==='B'?'var(--Bl)':'var(--Cl)'};border:1.5px solid ${tcol(p.team)};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:${tcol(p.team)};flex-shrink:0">${esc(p.name[0])}</div>
       <div class="lbinfo">
-        <div class="lbname">${esc(p.name)}${p.name===myName?' <span style="font-size:10px;color:var(--green);font-weight:700">· you</span>':''} <span class="rbadge ${p.role==='Captain'?'rCaptain':p.role==='Vice Captain'?'rVC':'rPlayer'}">${p.role}</span></div>
-        <div class="lbmeta">${p.sc.wo} workouts · ${p.sc.streak}🔥</div>
+        <div class="lbname" style="color:var(--text)">${esc(p.name)}${p.name===myName?' <span style="font-size:10px;color:var(--green);font-weight:700">· you</span>':''} <span class="rbadge ${p.role==='Captain'?'rCaptain':p.role==='Vice Captain'?'rVC':'rPlayer'}">${p.role}</span></div>
+        <div class="lbmeta" style="color:var(--muted)">${p.sc.wo} workouts · ${p.sc.streak}🔥</div>
       </div>
       <div style="text-align:right">
         <div style="font-size:18px;font-weight:800;color:var(--gold)">${p.sc.total}</div>
@@ -1109,12 +1488,15 @@ function renderLB(){
   document.getElementById('ptsBk').innerHTML=`
     <div class="card-title">Your breakdown — ${esc(me.name)}</div>
     ${[
-      ['Base points',my.base,`${my.wo} workouts × 5`],
-      ['Perfect week',my.wb,'+10 per complete Mon–Sun week'],
+      ['Base points',my.base,`${my.wo} workouts × 5 — Boss Week doubles days inside its window`],
+      ['Perfect week',my.wb,'+10 per any 7 consecutive days'],
       ['Team streak',my.tb,'Cumulative +1/+2/+3 (proportional threshold)'],
       ['Role bonus',my.rb,pl.role+' — applied on last day'],
       ['30-day bonus',my.b30,'All days logged'],
-      ['Boss week bonus',my.bossBonus||0,'Double base points week'],
+      ...(my.dayBonuses?[['Day bonuses',my.dayBonuses,'Freaky Fridays / Monday Motivation']]:[] ),
+      ...(my.underdogBonus?[['Underdog bonus',my.underdogBonus,'Underdog Week — first 3 workouts ×2']]:[] ),
+      ...(my.jackBonus?[['Jack of All Trades',my.jackBonus,`${Math.round(my.jackBonus/20)} award(s) × +20 pts`]]:[] ),
+      ...(my.ipBonus?[['Iron Pledge',my.ipBonus,my.ipBonus>0?'Pledge met — base pts doubled':'Pledge missed — base pts zeroed']]:[] ),
       ['Penalty',my.pen,'If under min workouts (last day)'],
     ].map(([l,v,s])=>`
       <div class="row" style="padding:8px 0;border-bottom:1px solid var(--border);gap:12px">
@@ -1239,7 +1621,7 @@ function renderAdminRoles(){
 }
 
 async function saveRoles(){
-  if(!season || !seasonId){ alert('This group is still loading — give it a second and try again.'); return; }
+  if(!season || !seasonId){ toast('This group is still loading — give it a second and try again.','error'); return; }
   const ref = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
   try {
     let written=null;
@@ -1259,12 +1641,12 @@ async function saveRoles(){
     if(written){ season.roster=written; const fresh=written.find(p=>p.name===me.name); if(fresh) me=fresh; }
     upsertSession(groupCode, me, groupData?.name);
     renderAdminRoles(); refresh();
-    alert('✅ Roles saved');
-  } catch(e){ logErr('saveRoles', e); alert('❌ Save failed — check connection: '+e.message); }
+    toast('Roles saved.','success');
+  } catch(e){ logErr('saveRoles', e); toast('Save failed — check connection: '+e.message,'error'); }
 }
 
 function renderTwistToggles(){
-  document.getElementById('twistToggles').innerHTML=TWIST_LIBRARY.map(t=>{
+  const renderRow = t => {
     const active=activeTwists[t.id];
     const isOn=active?.enabled||false;
     return `<div class="twist-row">
@@ -1275,23 +1657,158 @@ function renderTwistToggles(){
       </div>
       <div class="toggle${isOn?' on':''}" onclick="toggleTwist('${t.id}',${!isOn})"></div>
     </div>`;
-  }).join('');
+  };
+  // Boss Week / Underdog Week: status display + Sunday-only "Activate" button.
+  // Reads PERMANENT window docs (twistWindows), never a live toggle.
+  const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const renderWindowRow = t => {
+    const now=new Date();
+    const inSeason=now.getMonth()+1===season.month && now.getFullYear()===season.year;
+    const seasonPast=now.getFullYear()>season.year || (now.getFullYear()===season.year && now.getMonth()+1>season.month);
+    const D=inSeason?now.getDate():(seasonPast?99:0);
+    const isSunday=now.getDay()===0;
+    const mn=MN[season.month-1];
+    const fmt=w=>`${mn} ${w.monDate}–${w.sunDate}`;
+    const wins=twistWindows.filter(w=>w.twist===t.id && w.month===season.month && w.year===season.year).sort((a,b)=>a.monDate-b.monDate);
+    const past=wins.filter(w=>w.sunDate<D);
+    const current=wins.filter(w=>w.monDate<=D && D<=w.sunDate);
+    const upcoming=wins.filter(w=>w.monDate>D);
+    let status;
+    if(current.length) status=`<span style="color:var(--green);font-weight:600">Active: ${esc(current.map(fmt).join(', '))}</span>`;
+    else if(upcoming.length) status=`<span style="color:var(--gold);font-weight:600">Upcoming: ${esc(upcoming.map(fmt).join(', '))}</span>`;
+    else status=`<span style="color:var(--muted)">No ${t.name} set this month</span>`;
+    let frozen='';
+    if(t.id==='underdog_week'){
+      const live=current[0]||upcoming[0];
+      if(live&&Array.isArray(live.frozenPlayers)&&live.frozenPlayers.length) frozen=`<div style="font-size:11px;color:var(--orange);margin-top:3px">Underdog this week: ${live.frozenPlayers.map(esc).join(', ')}</div>`;
+    }
+    const pastHTML=past.length?`<div style="font-size:11px;color:var(--muted);margin-top:4px">Past: ${past.map(w=>esc(fmt(w))+' ✓').join(', ')}</div>`:'';
+    const btn=isSunday
+      ? `<button class="btn btn-surface btn-sm" style="margin:0" onclick="activateTwistWindow('${t.id}')">Activate for next week</button>`
+      : `<button class="btn btn-surface btn-sm" style="margin:0;opacity:.4;pointer-events:none">Available Sundays only</button>`;
+    return `<div class="twist-row" style="flex-direction:column;align-items:stretch;gap:8px">
+      <div>
+        <div style="font-size:13px;font-weight:600">${t.name}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${t.desc}</div>
+        <div style="font-size:12px;margin-top:6px">${status}</div>${frozen}${pastHTML}
+      </div>
+      ${btn}
+    </div>`;
+  };
+  // Freaky Fridays / Monday Motivation: month-long, day-1-only enable, then locked.
+  const renderDay1Row = t => {
+    const isOn=activeTwists[t.id]?.enabled||false;
+    const now=new Date();
+    const inSeason=now.getMonth()+1===season.month && now.getFullYear()===season.year;
+    const isDay1=inSeason && now.getDate()===1;
+    const locked=isOn||!isDay1;   // can't enable after day 1; can't turn off once on (runs all month)
+    return `<div class="twist-row">
+      <div style="flex:1;margin-right:12px">
+        <div style="font-size:13px;font-weight:600">${t.name}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${t.desc}</div>
+        <div style="font-size:11px;color:var(--gold);margin-top:4px">Enable on day 1 only — runs all month</div>
+      </div>
+      <div class="toggle${isOn?' on':''}" ${locked?'style="opacity:.45;pointer-events:none"':''} onclick="toggleTwist('${t.id}',${!isOn})"></div>
+    </div>`;
+  };
+  const WINDOW=new Set(['boss_week','underdog_week']);
+  const DAY1=new Set(['freaky_fridays','monday_motivation']);
+  const pick = t => WINDOW.has(t.id)?renderWindowRow(t):DAY1.has(t.id)?renderDay1Row(t):renderRow(t);
+  const standard = TWIST_LIBRARY.filter(t=>t.id!=='double_or_nothing');
+  const highStakes = TWIST_LIBRARY.find(t=>t.id==='double_or_nothing');
+  let html = standard.map(pick).join('');
+  if(highStakes){
+    html += `<div style="margin:16px 0 8px;padding:8px 0;border-top:1px solid var(--border);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--orange)">⚔️ High Stakes</div>`;
+    html += renderRow(highStakes);
+  }
+  document.getElementById('twistToggles').innerHTML = html;
+  updatePledgeTabVisibility();
+  renderIronPledgeAdmin();
 }
 async function toggleTwist(id,enable){
+  // Freaky Fridays / Monday Motivation: enable on day 1 of the season month only; runs all month.
+  if((id==='freaky_fridays'||id==='monday_motivation') && enable){
+    const label=id==='freaky_fridays'?'Freaky Fridays':'Monday Motivation';
+    if(activeTwists[id]?.enabled){ toast(`${label} is already active for this month`); return; }
+    const now=new Date();
+    const inSeason=now.getMonth()+1===season.month && now.getFullYear()===season.year;
+    if(!(inSeason && now.getDate()===1)){ toast(`${label} must be enabled on day 1 of the month — it runs all month.`,'error'); return; }
+  }
   const twist=TWIST_LIBRARY.find(t=>t.id===id);
   const data={enabled:enable};
   if(enable&&twist.configKey) data[twist.configKey]=activeTwists[id]?.[twist.configKey]||twist.configDefault||'';
   await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('twists').doc(id).set(data);
+}
+// ── WEEK-BOUND TWIST ACTIVATION (Boss Week / Underdog Week) ────────────────
+// Sunday-only. Writes a PERMANENT window doc for the next Mon–Sun. Deterministic
+// doc id + create-only rules mean a double-tap can never overwrite a past window.
+async function activateTwistWindow(twistId){
+  if(!season||!seasonId){ toast('Group still loading — try again in a second.','error'); return; }
+  const label=twistId==='boss_week'?'Boss Week':'Underdog Week';
+  const now=new Date();
+  if(now.getDay()!==0){   // 0 = Sunday
+    toast(`${label} can only be activated on a Sunday — it runs the following Mon–Sun.`,'error');
+    return;
+  }
+  const mon=new Date(now); mon.setDate(now.getDate()+1);   // tomorrow = Monday
+  const sun=new Date(mon); sun.setDate(mon.getDate()+6);   // following Sunday
+  const weekStr=getISOWeek(mon);
+  const monDate=mon.getDate(), sunDate=sun.getDate();
+  if(twistWindows.some(w=>w.twist===twistId && w.week===weekStr)){
+    toast(`${label} is already set for this week`); return;
+  }
+  const docData={
+    twist:twistId, week:weekStr, monDate, sunDate,
+    month:mon.getMonth()+1, year:mon.getFullYear(),
+    activatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+    activatedBy:(me&&me.name)||'admin'
+  };
+  if(twistId==='underdog_week'){
+    // Freeze current last place by fewest unique logged days — uses already-loaded
+    // allLogs/roster, no new Firestore read.
+    const roster=season.roster||[];
+    if(roster.length){
+      const counts=roster.map(p=>({name:p.name, wo:new Set(allLogs.filter(l=>l.player===p.name).map(l=>l.day)).size}));
+      const minWO=Math.min(...counts.map(c=>c.wo));
+      docData.frozenPlayers=counts.filter(c=>c.wo===minWO).map(c=>c.name);
+    } else { docData.frozenPlayers=[]; }
+  }
+  try{
+    await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId)
+      .collection('twistWindows').doc(`${twistId}_${weekStr}`).set(docData);
+    const range=`${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][mon.getMonth()]} ${monDate}–${sunDate}`;
+    toast(twistId==='underdog_week' && docData.frozenPlayers && docData.frozenPlayers.length
+      ? `${label} set for next week (${range}). Underdog: ${docData.frozenPlayers.join(', ')}`
+      : `${label} set for next week (${range}).`,'success');
+  }catch(e){ logErr('activateTwistWindow '+twistId, e); toast(`Could not set ${label} — it may already be set, or check your connection.`,'error'); }
 }
 async function saveTwistConfig(id,key,value){
   await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('twists').doc(id).update({[key]:value});
 }
 async function award30(){
   const p=document.getElementById('aPlayer').value;
-  if(!p){alert('Select player');return;}
-  if(bonus30.find(b=>b.player===p)){alert('Already awarded');return;}
+  if(!p){toast('Select player','error');return;}
+  if(bonus30.find(b=>b.player===p)){toast('Already awarded','error');return;}
   await db.collection('bonuses_30day').add({groupCode,player:p,month:season.month,year:season.year});
-  alert(`✅ +50 pts awarded to ${p}`);
+  toast(`+50 pts awarded to ${p}.`,'success');
+}
+
+async function saveFoundryGoal(){
+  if(!season||!seasonId){ toast('Group still loading — try again in a second.','error'); return; }
+  const raw=document.getElementById('foundryGoalInput').value.trim();
+  const val=raw===''?null:parseInt(raw);
+  if(val!==null&&(isNaN(val)||val<1)){ toast('Enter a positive number, or leave blank to use auto.','error'); return; }
+  try{
+    await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).update({
+      foundryGoal: val===null ? firebase.firestore.FieldValue.delete() : val
+    });
+    season.foundryGoal=val===null?undefined:val;
+    toast(val===null?'Goal reset to auto.':'Season goal set to '+val+' strikes.','success');
+    document.getElementById('foundryGoalInput').value='';
+    const fgi=document.getElementById('foundryGoalInput');
+    if(fgi) fgi.placeholder=val?'Current: '+val+' (edit to change)':'e.g. 200 (auto if blank)';
+    renderHome();
+  }catch(e){ logErr('saveFoundryGoal',e); toast('Save failed — check connection.','error'); }
 }
 
 // Super-admin engagement trends: active people/day + participation rate,
@@ -1445,9 +1962,9 @@ async function superViewGroup(code){
   const gSnap=await db.collection('groups').doc(code).get();
   groupData=gSnap.data();
   const sid=groupData.currentSeasonId;
-  if(!sid){ alert('This group has no active season.'); return; }
+  if(!sid){ toast('This group has no active season.','error'); return; }
   const sSnap=await db.collection('groups').doc(code).collection('seasons').doc(sid).get();
-  if(!sSnap.exists){ alert('Active season missing.'); return; }
+  if(!sSnap.exists){ toast('Active season missing.','error'); return; }
   season=sSnap.data();
   seasonId=sid;
   me=(season.roster&&season.roster[0])||{name:'Admin',team:'A',role:'Player'};
@@ -1471,12 +1988,12 @@ window._editRoster=null;
 async function openEditGroup(code){
   try{
     const gSnap=await db.collection('groups').doc(code).get();
-    if(!gSnap.exists){ alert('Group not found.'); return; }
+    if(!gSnap.exists){ toast('Group not found.','error'); return; }
     const g=gSnap.data();
     const sid=g.currentSeasonId;
-    if(!sid){ alert('Group has no active season.'); return; }
+    if(!sid){ toast('Group has no active season.','error'); return; }
     const sSnap=await db.collection('groups').doc(code).collection('seasons').doc(sid).get();
-    if(!sSnap.exists){ alert('Active season missing.'); return; }
+    if(!sSnap.exists){ toast('Active season missing.','error'); return; }
     const s=sSnap.data();
 
     window._editGroupCode=code;
@@ -1495,7 +2012,7 @@ async function openEditGroup(code){
     document.getElementById('editGroupStatus').textContent='';
     document.getElementById('editGroupModal').classList.remove('hidden');
     document.getElementById('editGroupModal').scrollIntoView({behavior:'smooth',block:'center'});
-  }catch(e){ console.error(e); alert('Could not open settings: '+e.message); }
+  }catch(e){ console.error(e); toast('Could not open settings: '+e.message,'error'); }
 }
 
 function closeEditGroup(){
@@ -1547,29 +2064,29 @@ async function saveEditGroup(){
 // so the archived season stays frozen and the new season starts with a clean board.
 async function startNewSeason(code){
   const gSnap = await db.collection('groups').doc(code).get();
-  if(!gSnap.exists){ alert('Group not found.'); return; }
+  if(!gSnap.exists){ toast('Group not found.','error'); return; }
   const g = gSnap.data();
   const curSid = g.currentSeasonId;
-  if(!curSid){ alert('Group has no active season to roll over from.'); return; }
+  if(!curSid){ toast('Group has no active season to roll over from.','error'); return; }
   const curSnap = await db.collection('groups').doc(code).collection('seasons').doc(curSid).get();
-  if(!curSnap.exists){ alert('Current season doc missing.'); return; }
+  if(!curSnap.exists){ toast('Current season doc missing.','error'); return; }
   const cur = curSnap.data();
 
   // Gather the new season parameters
   const month = parseInt(prompt(`New season — month (1-12)?\n(Current active: ${cur.month}/${cur.year})`));
-  if(!month || month<1 || month>12){ alert('Invalid month.'); return; }
+  if(!month || month<1 || month>12){ toast('Invalid month.','error'); return; }
   const year = parseInt(prompt('New season — year?', cur.year));
-  if(!year){ alert('Invalid year.'); return; }
+  if(!year){ toast('Invalid year.','error'); return; }
   const newSid = seasonIdOf(month, year);
 
-  if(newSid === curSid){ alert('That season is already the active one.'); return; }
+  if(newSid === curSid){ toast('That season is already the active one.','error'); return; }
 
   // Refuse to clobber an existing season doc (guards double-rollover)
   const existing = await db.collection('groups').doc(code).collection('seasons').doc(newSid).get();
-  if(existing.exists){ alert(`A ${newSid} season already exists for this group. Aborting to avoid overwriting it.`); return; }
+  if(existing.exists){ toast(`A ${newSid} season already exists for this group. Aborting to avoid overwriting it.`,'error'); return; }
 
   const days = parseInt(prompt('Days in the new month?', new Date(year, month, 0).getDate()));
-  if(!days){ alert('Invalid day count.'); return; }
+   if(!days){ toast('Invalid day count.','error'); return; }
 
   const carryRoster = confirm('Carry forward the roster (same players, teams, roles)?\n\nOK = carry forward\nCancel = start with empty roster');
   const newRoster = carryRoster ? JSON.parse(JSON.stringify(cur.roster||[])) : [];
@@ -1604,9 +2121,10 @@ async function startNewSeason(code){
 
   try {
     await batch.commit();
-    alert(`✅ ${cur.month}/${cur.year} archived. ${month}/${year} is now the active season${carryRoster?` with ${newRoster.length} players carried over`:' (empty roster)'}.\n\nTip: adjust teams/roles in Admin → Team & Role Assignment if needed.`);
+    globalDataCache = null;
+    toast(`${cur.month}/${cur.year} archived. ${month}/${year} is now live. Adjust teams in Admin if needed.`,'success');
     loadSuperAdmin();
-  } catch(e){ console.error(e); alert('❌ Rollover failed: '+e.message); }
+  } catch(e){ console.error(e); toast('Rollover failed: '+e.message,'error'); }
 }
 function exitSuper(){
   // Leave super admin entirely. If a normal player session exists on this
@@ -1687,7 +2205,7 @@ function todayStamp(){
 }
 async function createGroup(){
   const name=document.getElementById('newGroupName').value.trim();
-  if(!name){alert('Enter a group name');return;}
+  if(!name){toast('Enter a group name','error');return;}
   const month=parseInt(document.getElementById('newGroupMonth').value);
   const year=parseInt(document.getElementById('newGroupYear').value);
   const days=parseInt(document.getElementById('newGroupDays').value);
@@ -1723,12 +2241,74 @@ async function createGroup(){
     endedAt: null
   });
   await batch.commit();
+  globalDataCache = null;
 
   const res=document.getElementById('newGroupResult');
   res.className='warn-box warn-green';
   res.innerHTML=`✅ Group created! Code: <strong style="font-size:20px;letter-spacing:3px">${code}</strong><br>Share this code with your group members.`;
   res.classList.remove('hidden');
   loadSuperAdmin();
+}
+
+// ── TAB ANALYTICS VIEW (super admin) ────────────────────────────────────────
+async function loadTabAnalytics(){
+  const code=(document.getElementById('analyticsGroupCode')?.value||'').trim().toUpperCase();
+  const el=document.getElementById('tabAnalyticsResult');
+  if(!el) return;
+  if(!code){ el.innerHTML='<div class="tmuted" style="color:var(--red)">Enter a group code first.</div>'; return; }
+  el.innerHTML='<div class="tmuted">Loading…</div>';
+  try{
+    const snap=await db.collection('analytics').doc(code).collection('tabClicks').get();
+    if(snap.empty){ el.innerHTML='<div class="tmuted">No analytics data yet for this group.</div>'; return; }
+    const docs=snap.docs.map(d=>({month:d.id,...d.data()})).sort((a,b)=>b.month.localeCompare(a.month));
+    const tabNames=[...new Set(docs.flatMap(d=>Object.keys(d).filter(k=>k!=='month')))].sort();
+    const latest=docs[0];
+    const topTab=[...tabNames].sort((a,b)=>(latest[b]||0)-(latest[a]||0))[0];
+    el.innerHTML=`
+      <div style="overflow-x:auto">
+        <table style="width:100%;font-size:12px;border-collapse:collapse;margin-bottom:12px">
+          <tr style="border-bottom:1px solid var(--border)">
+            <th style="text-align:left;padding:6px 4px;color:var(--muted);font-weight:600">Month</th>
+            ${tabNames.map(t=>`<th style="text-align:center;padding:6px 4px;color:var(--muted);font-weight:600">${t}</th>`).join('')}
+          </tr>
+          ${docs.map(d=>`
+            <tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:8px 4px;font-weight:600;white-space:nowrap">${d.month}</td>
+              ${tabNames.map(t=>`<td style="padding:8px 4px;text-align:center;color:${(d[t]||0)>0?'var(--text)':'var(--muted)'}">${d[t]||0}</td>`).join('')}
+            </tr>`).join('')}
+        </table>
+      </div>
+      <div style="font-size:12px;color:var(--muted)">Most visited this month (<strong style="color:var(--text)">${latest.month}</strong>): <span style="color:var(--gold);font-weight:700">${topTab||'—'}</span> (${latest[topTab]||0} clicks)</div>`;
+  }catch(e){ logErr('loadTabAnalytics',e); el.innerHTML='<div class="tmuted" style="color:var(--red)">Failed to load — check connection.</div>'; }
+}
+
+// ── UPDATES PAGE ANALYTICS VIEW (super admin) ───────────────────────────────
+// Global counters from analytics/updates-page/events/{YYYY-MM} — landing card
+// taps, back taps, and video plays written by the public updates.html page.
+async function loadUpdatesAnalytics(){
+  const el=document.getElementById('updatesAnalyticsResult');
+  if(!el) return;
+  el.innerHTML='<div class="tmuted">Loading…</div>';
+  try{
+    const snap=await db.collection('analytics').doc('updates-page').collection('events').get();
+    if(snap.empty){ el.innerHTML='<div class="tmuted">No updates-page analytics yet.</div>'; return; }
+    const docs=snap.docs.map(d=>({month:d.id,...d.data()})).sort((a,b)=>b.month.localeCompare(a.month));
+    const eventNames=[...new Set(docs.flatMap(d=>Object.keys(d).filter(k=>k!=='month')))].sort();
+    el.innerHTML=`
+      <div style="overflow-x:auto">
+        <table style="width:100%;font-size:12px;border-collapse:collapse;margin-bottom:4px">
+          <tr style="border-bottom:1px solid var(--border)">
+            <th style="text-align:left;padding:6px 4px;color:var(--muted);font-weight:600">Month</th>
+            ${eventNames.map(t=>`<th style="text-align:center;padding:6px 4px;color:var(--muted);font-weight:600;white-space:nowrap">${esc(t)}</th>`).join('')}
+          </tr>
+          ${docs.map(d=>`
+            <tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:8px 4px;font-weight:600;white-space:nowrap">${esc(d.month)}</td>
+              ${eventNames.map(t=>`<td style="padding:8px 4px;text-align:center;color:${(d[t]||0)>0?'var(--text)':'var(--muted)'}">${d[t]||0}</td>`).join('')}
+            </tr>`).join('')}
+        </table>
+      </div>`;
+  }catch(e){ logErr('loadUpdatesAnalytics',e); el.innerHTML='<div class="tmuted" style="color:var(--red)">Failed to load — check connection.</div>'; }
 }
 
 // ── THEME (light/dark) ─────────────────────────────────────────────────────
@@ -1750,6 +2330,10 @@ function toggleTheme(){
   document.documentElement.setAttribute('data-theme', saved);
 })();
 
+let globalDataCache = null;
+let globalDataCacheTime = 0;
+const GLOBAL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 // ── GLOBAL LEADERBOARD (cross-group, opt-in) ───────────────────────────────
 // One-shot read (not a live listener). Points use the SAME scoring engine as
 // in-app, passing each group's data as ctx. Only players who opted in appear.
@@ -1762,70 +2346,87 @@ async function loadGlobal(){
   const grpEl=document.getElementById('globalGroups');
   const ptsEl=document.getElementById('globalPoints');
   if(!actEl||!grpEl||!ptsEl) return;
+  const now=Date.now();
+  if(globalDataCache && (now-globalDataCacheTime)<GLOBAL_CACHE_TTL){
+    renderGlobalFromCache(globalDataCache);
+    return;
+  }
   actEl.innerHTML=grpEl.innerHTML=ptsEl.innerHTML='<div class="tmuted">Loading…</div>';
   try{
     const gSnap=await db.collection('groups').get();
     const groups=gSnap.docs.map(d=>({code:d.id,...d.data()}));
     const logsSnap=await db.collection('logs').get();
-    const allLogsArr=logsSnap.docs.map(d=>({id:d.id,...d.data()}));
+    const logs=logsSnap.docs.map(d=>({id:d.id,...d.data()}));
     const bonusSnap=await db.collection('bonuses_30day').get();
-    const allBonuses=bonusSnap.docs.map(d=>d.data());
-
-    // Most active groups today
-    const now=new Date();
-    const startOfDay=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-    const perGroup={};
-    allLogsArr.forEach(l=>{
-      const ts=l.timestamp?.seconds?new Date(l.timestamp.seconds*1000):null;
-      if(ts&&ts>=startOfDay) perGroup[l.groupCode]=(perGroup[l.groupCode]||0)+1;
-    });
-    const activeRanked=Object.entries(perGroup)
-      .map(([code,count])=>({name:groups.find(g=>g.code===code)?.name||code,count}))
-      .sort((a,b)=>b.count-a.count).slice(0,5);
-    actEl.innerHTML = activeRanked.length===0
-      ? '<div class="tmuted">No workouts logged anywhere yet today.</div>'
-      : activeRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(g.name)}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--green)">${g.count}</div><div style="font-size:10px;color:var(--muted)">logs today</div></div></div>`).join('');
-
-    // Score every group's active season once → group aggregates + consented players
-    const groupAgg=[];
-    const playerEntries=[];
+    const bonuses=bonusSnap.docs.map(d=>d.data());
+    const groupSeasons={};
     for(const g of groups){
       const sid=g.currentSeasonId; if(!sid) continue;
       const sSnap=await db.collection('groups').doc(g.code).collection('seasons').doc(sid).get();
       if(!sSnap.exists) continue;
       const sData=sSnap.data();
-      const roster=sData.roster||[];
-      if(roster.length===0) continue;
+      if(!(sData.roster||[]).length) continue;
       const twSnap=await db.collection('groups').doc(g.code).collection('seasons').doc(sid).collection('twists').get();
       const twists={}; twSnap.docs.forEach(t=>{twists[t.id]=t.data();});
-      const ctx={
-        season:sData,
-        logs:allLogsArr.filter(l=>l.groupCode===g.code&&l.month===sData.month&&l.year===sData.year),
-        twists,
-        bonuses:allBonuses.filter(b=>b.groupCode===g.code&&b.month===sData.month&&b.year===sData.year)
-      };
-      let groupTotal=0;
-      roster.forEach(p=>{
-        const t=score(p.name, ctx).total;
-        groupTotal+=t;
-        if(p.globalConsent===true) playerEntries.push({name:p.name, group:g.name, points:t});
-      });
-      groupAgg.push({name:g.name, total:groupTotal, count:roster.length, avg:Math.round(groupTotal/roster.length)});
+      const twwSnap=await db.collection('groups').doc(g.code).collection('seasons').doc(sid).collection('twistWindows').get();
+      const twistWindows=twwSnap.docs.map(d=>({id:d.id,...d.data()}));
+      groupSeasons[g.code]={sData,twists,twistWindows};
     }
-
-    // Top groups by avg points / player (total shown alongside)
-    const grpRanked=groupAgg.sort((a,b)=>b.avg-a.avg).slice(0,5);
-    grpEl.innerHTML = grpRanked.length===0
-      ? '<div class="tmuted">No groups yet.</div>'
-      : grpRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(g.name)}</div><div class="lbmeta">${g.count} players · ${g.total} total pts</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${g.avg}</div><div style="font-size:10px;color:var(--muted)">avg/player</div></div></div>`).join('');
-
-    // Individual points — opt-in only
-    playerEntries.sort((a,b)=>b.points-a.points);
-    const top=playerEntries.slice(0,5);
-    ptsEl.innerHTML = top.length===0
-      ? '<div class="tmuted">No one has opted in yet. Turn on "Show me on the global leaderboard" on your Home screen to appear here.</div>'
-      : top.map((e,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(e.name)}</div><div class="lbmeta">${esc(e.group)}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${e.points}</div><div style="font-size:10px;color:var(--muted)">pts</div></div></div>`).join('');
+    globalDataCache={groups,logs,bonuses,groupSeasons};
+    globalDataCacheTime=Date.now();
+    renderGlobalFromCache(globalDataCache);
   }catch(e){ console.error('loadGlobal failed:',e); actEl.innerHTML='<div class="tmuted">Could not load global stats. Check connection.</div>'; grpEl.innerHTML=''; ptsEl.innerHTML=''; }
+}
+
+function renderGlobalFromCache({groups,logs,bonuses,groupSeasons}){
+  const actEl=document.getElementById('globalActive');
+  const grpEl=document.getElementById('globalGroups');
+  const ptsEl=document.getElementById('globalPoints');
+  if(!actEl||!grpEl||!ptsEl) return;
+  const now=new Date();
+  const startOfDay=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const perGroup={};
+  logs.forEach(l=>{
+    const ts=l.timestamp?.seconds?new Date(l.timestamp.seconds*1000):null;
+    if(ts&&ts>=startOfDay) perGroup[l.groupCode]=(perGroup[l.groupCode]||0)+1;
+  });
+  const activeRanked=Object.entries(perGroup)
+    .map(([code,count])=>({name:groups.find(g=>g.code===code)?.name||code,count}))
+    .sort((a,b)=>b.count-a.count).slice(0,5);
+  actEl.innerHTML=activeRanked.length===0
+    ?'<div class="tmuted">No workouts logged anywhere yet today.</div>'
+    :activeRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(g.name)}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--green)">${g.count}</div><div style="font-size:10px;color:var(--muted)">logs today</div></div></div>`).join('');
+  const groupAgg=[];
+  const playerEntries=[];
+  for(const g of groups){
+    const gs=groupSeasons[g.code]; if(!gs) continue;
+    const {sData,twists,twistWindows}=gs;
+    const roster=sData.roster||[];
+    const ctx={
+      season:sData,
+      groupCode:g.code,
+      logs:logs.filter(l=>l.groupCode===g.code&&l.month===sData.month&&l.year===sData.year),
+      twists,
+      twistWindows:(twistWindows||[]).filter(w=>w.month===sData.month&&w.year===sData.year),
+      bonuses:bonuses.filter(b=>b.groupCode===g.code&&b.month===sData.month&&b.year===sData.year)
+    };
+    let groupTotal=0;
+    roster.forEach(p=>{
+      const t=score(p.name,ctx).total;
+      groupTotal+=t;
+      if(p.globalConsent===true) playerEntries.push({name:p.name,group:g.name,points:t});
+    });
+    groupAgg.push({name:g.name,total:groupTotal,count:roster.length,avg:Math.round(groupTotal/roster.length)});
+  }
+  const grpRanked=groupAgg.sort((a,b)=>b.avg-a.avg).slice(0,5);
+  grpEl.innerHTML=grpRanked.length===0
+    ?'<div class="tmuted">No groups yet.</div>'
+    :grpRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(g.name)}</div><div class="lbmeta">${g.count} players · ${g.total} total pts</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${g.avg}</div><div style="font-size:10px;color:var(--muted)">avg/player</div></div></div>`).join('');
+  playerEntries.sort((a,b)=>b.points-a.points);
+  const top=playerEntries.slice(0,5);
+  ptsEl.innerHTML=top.length===0
+    ?'<div class="tmuted">No one has opted in yet. Turn on "Show me on the global leaderboard" on your Home screen to appear here.</div>'
+    :top.map((e,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(e.name)}</div><div class="lbmeta">${esc(e.group)}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${e.points}</div><div style="font-size:10px;color:var(--muted)">pts</div></div></div>`).join('');
 }
 
 // Self-serve opt-in for the global points board. Default OFF (privacy-first).
@@ -1833,9 +2434,12 @@ function renderGlobalConsent(){
   const el=document.getElementById('globalConsentCard');
   if(!el||!me) return;
   const on = !!me.globalConsent;
-  el.innerHTML=`<div class="row">
-    <div style="flex:1;margin-right:12px"><div style="font-size:14px;font-weight:600">Show me on the global leaderboard</div><div class="tmuted" style="font-size:12px">Your name, group and points become visible to every Forge group. Off by default.</div></div>
-    <div class="toggle${on?' on':''}" onclick="toggleGlobalConsent(${!on})"></div>
+  el.innerHTML=`<div class="consent-tap-card${on?' selected':''}" onclick="toggleGlobalConsent(${!on})">
+    <div style="flex:1">
+      <div style="font-size:14px;font-weight:600;color:${on?'var(--text)':'var(--text-muted)'}">${on?'Visible on global leaderboard':'Show me on the global leaderboard'}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:3px">Your name, group and points become visible to every Forge group.</div>
+    </div>
+    <div style="font-size:12px;font-weight:800;letter-spacing:.06em;color:${on?'var(--accent)':'var(--text-muted)'}">${on?'ON':'OFF'}</div>
   </div>`;
 }
 async function toggleGlobalConsent(val){
@@ -1856,26 +2460,297 @@ async function toggleGlobalConsent(val){
     if(written){ season.roster=written; me=written.find(p=>p.name===me.name)||me; }
     upsertSession(groupCode, me, groupData?.name);
     renderGlobalConsent();
-  }catch(e){ logErr('toggleGlobalConsent', e); alert('Could not update preference — check connection.'); renderGlobalConsent(); }
+  }catch(e){ logErr('toggleGlobalConsent', e); toast('Could not update preference — check connection.','error'); renderGlobalConsent(); }
 }
+// ── JACK OF ALL TRADES AWARD CHECK ────────────────────────────────────────
+// Called after a successful batch.commit() in submitLog. Checks if the player
+// now has 4+ distinct workout types in the current Mon-Sun week and awards +20
+// (via Firestore jackAwards subcollection) if not already awarded this week.
+async function checkJackOfAllTrades(day, newWorkouts){
+  if(!activeTwists['jack_of_all_trades']?.enabled||!me||!season||!seasonId) return;
+  const date=new Date(season.year,season.month-1,day);
+  const dow=date.getDay()===0?6:date.getDay()-1;
+  const monDay=day-dow, sunDay=monDay+6;
+  const weekStr=getISOWeek(date);
+  // Collect distinct types: existing logs this week + new workouts being submitted
+  const weekLogs=allLogs.filter(l=>l.player===me.name&&l.day>=monDay&&l.day<=sunDay);
+  const types=new Set([...weekLogs.flatMap(l=>l.workouts||[l.workout]).filter(Boolean),...newWorkouts]);
+  if(types.size<4) return;
+  const docId=(me.name+'_'+weekStr).replace(/[^a-zA-Z0-9_-]/g,'_');
+  const awardRef=db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId).collection('jackAwards').doc(docId);
+  try{
+    const ex=await awardRef.get();
+    if(ex.exists) return;
+    await awardRef.set({player:me.name,week:weekStr,groupCode,workoutTypes:[...types],awardedAt:firebase.firestore.FieldValue.serverTimestamp()});
+    toast('🃏 Jack of All Trades! +20 pts for 4 distinct workout types this week.','success');
+  }catch(e){ logErr('checkJackOfAllTrades',e); }
+}
+
+// ── IRON PLEDGE ───────────────────────────────────────────────────────────
+// Show/hide pledge tab + admin card based on twist state
+function updatePledgeTabVisibility(){
+  const tab=document.getElementById('pledgeTab');
+  if(tab) tab.style.display=activeTwists['double_or_nothing']?.enabled?'':'none';
+  const card=document.getElementById('ironPledgeAdminCard');
+  if(card) card.style.display=activeTwists['double_or_nothing']?.enabled?'':'none';
+}
+
+// Status mini-card on home page (between hero and goal ring)
+function renderPledgeStatusCard(){
+  const el=document.getElementById('pledgeStatusCard');
+  if(!el||!me||!season) return;
+  if(!activeTwists['double_or_nothing']?.enabled){ el.innerHTML=''; return; }
+  const today=new Date();
+  const weekStr=getISOWeek(today);
+  const myBet=bets[me.name];
+  if(!myBet||myBet.week!==weekStr){
+    el.innerHTML=`<div class="card" style="border-color:var(--orange);cursor:pointer" onclick="showTab('pledge')">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="font-size:32px">🔒</div>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--orange)">Iron Pledge is active this month</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">You haven't pledged this week yet. Tap to lock in your target.</div>
+        </div>
+      </div>
+    </div>`;
+    return;
+  }
+  const dow=today.getDay()===0?6:today.getDay()-1;
+  const monDay=today.getDate()-dow;
+  const daysInWeek=new Set(allLogs.filter(l=>l.player===me.name&&l.day>=monDay&&l.day<=monDay+6).map(l=>l.day)).size;
+  const pledge=myBet.pledge;
+  const calc=ironPledgeBonuses.find(b=>b.player===me.name&&b.week===weekStr&&b.groupCode===groupCode);
+  const bdrCol=calc?(calc.type==='double'?'var(--green)':'var(--red)'):(daysInWeek>=pledge?'var(--green)':'var(--orange)');
+  el.innerHTML=`<div class="card" style="border-color:${bdrCol};cursor:pointer" onclick="showTab('pledge')">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--orange)">Iron Pledge</div>
+        <div style="font-size:22px;font-weight:800;margin:2px 0">${daysInWeek}<span style="font-size:13px;font-weight:500;color:var(--muted)"> / ${pledge} pledged</span></div>
+        ${calc
+          ?(calc.type==='double'
+            ?`<div style="font-size:12px;color:var(--green)">✅ Met — double base pts applied</div>`
+            :`<div style="font-size:12px;color:var(--red)">❌ Missed — base pts zeroed</div>`)
+          :`<div style="font-size:12px;color:${daysInWeek>=pledge?'var(--green)':'var(--muted)'}">${daysInWeek>=pledge?'✅ On track':'Still time to hit it'}</div>`
+        }
+      </div>
+      <div style="font-size:28px">${calc?(calc.type==='double'?'🔥':'💀'):(daysInWeek>=pledge?'✅':'⏳')}</div>
+    </div>
+  </div>`;
+}
+
+// Full pledge page
+function renderIronPledgePage(){
+  const el=document.getElementById('pledgeContent');
+  if(!el||!me||!season) return;
+  if(!activeTwists['double_or_nothing']?.enabled){ el.innerHTML='<div class="tmuted">Iron Pledge is not active this month.</div>'; return; }
+  const today=new Date();
+  const weekStr=getISOWeek(today);
+  const myBet=bets[me.name];
+  if(!myBet||myBet.week!==weekStr){
+    el.innerHTML=`
+      <div class="card" style="text-align:center;padding:28px 20px">
+        <div style="font-size:52px;margin-bottom:12px">🔒</div>
+        <div style="font-size:18px;font-weight:800;margin-bottom:8px">Lock In Your Weekly Target</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.6">
+          Commit to a number of workouts for this Mon–Sun week.<br>
+          <strong style="color:var(--green)">Hit it →</strong> base points for the week <strong style="color:var(--green)">double</strong>.<br>
+          <strong style="color:var(--red)">Miss it →</strong> base points for the week go to <strong style="color:var(--red)">zero</strong>.
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:16px">
+          <input type="number" id="pledgeInput" min="1" max="7" placeholder="1–7" style="width:90px;text-align:center;font-size:26px;font-weight:800;padding:10px;margin:0">
+          <span style="font-size:14px;color:var(--muted)">workouts</span>
+        </div>
+        <button class="btn btn-gold" style="margin:0" onclick="lockInPledge()">🔒 Lock It In</button>
+        <div style="font-size:11px;color:var(--muted);margin-top:14px">One pledge per week. No take-backs. Results applied by admin at week end.</div>
+      </div>`;
+    return;
+  }
+  // Pledged — show progress ring
+  const dow=today.getDay()===0?6:today.getDay()-1;
+  const monDay=today.getDate()-dow;
+  const daysInWeek=new Set(allLogs.filter(l=>l.player===me.name&&l.day>=monDay&&l.day<=monDay+6).map(l=>l.day)).size;
+  const pledge=myBet.pledge;
+  const r=44,cx=52,cy=52;
+  const circ=+(2*Math.PI*r).toFixed(2);
+  const pct=Math.min(1,daysInWeek/pledge);
+  const offset=+(circ*(1-pct)).toFixed(2);
+  const hit=daysInWeek>=pledge;
+  const col=hit?'var(--green)':pct>0.5?'var(--gold)':'var(--orange)';
+  const daysLeft=Math.max(0,6-dow);
+  const calc=ironPledgeBonuses.find(b=>b.player===me.name&&b.week===weekStr&&b.groupCode===groupCode);
+  let statusHTML='';
+  if(calc){
+    statusHTML=calc.type==='double'
+      ?`<div class="warn-box warn-green" style="margin-top:12px;margin-bottom:0">✅ Pledge met! Base pts for this week doubled (+${calc.rawPoints} pts bonus).</div>`
+      :`<div class="warn-box warn-red" style="margin-top:12px;margin-bottom:0">❌ Pledge missed. Base pts for this week zeroed (−${calc.rawPoints} pts).</div>`;
+  } else if(hit){
+    statusHTML=`<div class="warn-box warn-green" style="margin-top:12px;margin-bottom:0">✅ Target reached! Admin will confirm results at week end.</div>`;
+  } else {
+    statusHTML=`<div class="warn-box warn-orange" style="margin-top:12px;margin-bottom:0">⏳ ${daysLeft} day${daysLeft===1?'':'s'} left. Need ${Math.max(0,pledge-daysInWeek)} more workout${pledge-daysInWeek===1?'':'s'}.</div>`;
+  }
+  el.innerHTML=`
+    <div class="card" style="text-align:center;padding:24px 20px">
+      <div style="font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--orange);margin-bottom:14px">This Week's Pledge</div>
+      <svg width="104" height="104" viewBox="0 0 104 104" style="display:block;margin:0 auto">
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--border)" stroke-width="8"/>
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${col}" stroke-width="8"
+          stroke-dasharray="${circ}" stroke-dashoffset="${offset}"
+          stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"
+          style="transition:stroke-dashoffset .8s cubic-bezier(.2,.8,.2,1)"/>
+        <text x="${cx}" y="${cy-4}" text-anchor="middle" dominant-baseline="central"
+          style="fill:var(--text);font-size:18px;font-weight:800;font-family:-apple-system,sans-serif">${daysInWeek}</text>
+        <text x="${cx}" y="${cy+14}" text-anchor="middle"
+          style="fill:var(--muted);font-size:10px;font-family:-apple-system,sans-serif">/ ${pledge}</text>
+      </svg>
+      <div style="margin-top:12px;font-size:28px;font-weight:800;color:${col}">${daysInWeek}<span style="font-size:14px;font-weight:500;color:var(--muted)"> / ${pledge} pledged</span></div>
+      ${statusHTML}
+    </div>`;
+}
+
+async function lockInPledge(){
+  const inp=document.getElementById('pledgeInput');
+  const val=parseInt(inp?.value);
+  if(!val||val<1||val>7){ toast('Enter a number between 1 and 7.','error'); return; }
+  const weekStr=getISOWeek(new Date());
+  try{
+    await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId)
+      .collection('bets').doc(me.name).set({
+        player:me.name, pledge:val, week:weekStr, groupCode,
+        lockedAt:firebase.firestore.FieldValue.serverTimestamp()
+      });
+    toast(`Pledge locked: ${val} workout${val===1?'':'s'} this week. No take-backs.`,'success');
+  }catch(e){ logErr('lockInPledge',e); toast('Failed to lock pledge — check connection.','error'); }
+}
+
+// Admin table: players who pledged this week, with current status
+function renderIronPledgeAdmin(){
+  const el=document.getElementById('ironPledgeTable');
+  if(!el) return;
+  updatePledgeTabVisibility();
+  if(!activeTwists['double_or_nothing']?.enabled) return;
+  const today=new Date();
+  const weekStr=getISOWeek(today);
+  const activeBets=Object.entries(bets).filter(([,b])=>b.week===weekStr);
+  if(activeBets.length===0){ el.innerHTML='<div class="tmuted" style="margin-bottom:0">No pledges locked in this week yet.</div>'; return; }
+  const dow=today.getDay()===0?6:today.getDay()-1;
+  const monDay=today.getDate()-dow;
+  el.innerHTML=`<table style="width:100%;font-size:12px;border-collapse:collapse;margin-bottom:4px">
+    <tr style="border-bottom:1px solid var(--border)">
+      <th style="text-align:left;padding:6px 4px;color:var(--muted);font-weight:600">Player</th>
+      <th style="text-align:center;padding:6px 4px;color:var(--muted);font-weight:600">Pledged</th>
+      <th style="text-align:center;padding:6px 4px;color:var(--muted);font-weight:600">Logged</th>
+      <th style="text-align:center;padding:6px 4px;color:var(--muted);font-weight:600">Status</th>
+    </tr>
+    ${activeBets.map(([playerName,betData])=>{
+      const logged=new Set(allLogs.filter(l=>l.player===playerName&&l.day>=monDay&&l.day<=monDay+6).map(l=>l.day)).size;
+      const calc=ironPledgeBonuses.find(b=>b.player===playerName&&b.week===weekStr&&b.groupCode===groupCode);
+      const status=calc
+        ?(calc.type==='double'?`<span style="color:var(--green)">✅ Doubled</span>`:`<span style="color:var(--red)">❌ Zeroed</span>`)
+        :(logged>=betData.pledge?`<span style="color:var(--green)">On track</span>`:`<span style="color:var(--muted)">In progress</span>`);
+      return `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:8px 4px;font-weight:600">${esc(playerName)}</td>
+        <td style="padding:8px 4px;text-align:center">${betData.pledge}</td>
+        <td style="padding:8px 4px;text-align:center">${logged}</td>
+        <td style="padding:8px 4px;text-align:center">${status}</td>
+      </tr>`;
+    }).join('')}
+  </table>`;
+}
+
+async function calculateIronPledgeResults(){
+  if(!season||!seasonId||!groupCode) return;
+  const today=new Date();
+  const weekStr=getISOWeek(today);
+  const activeBets=Object.entries(bets).filter(([,b])=>b.week===weekStr);
+  if(activeBets.length===0){ toast('No active pledges this week.'); return; }
+  const dow=today.getDay()===0?6:today.getDay()-1;
+  const monDay=today.getDate()-dow;
+  const alreadyCalc=ironPledgeBonuses.filter(b=>b.groupCode===groupCode&&b.week===weekStr);
+  const toCalc=activeBets.filter(([p])=>!alreadyCalc.some(b=>b.player===p));
+  if(toCalc.length===0){ toast('All pledges already calculated for this week.'); return; }
+  try{
+    const batch=db.batch();
+    for(const [playerName,betData] of toCalc){
+      const daysLogged=new Set(allLogs.filter(l=>l.player===playerName&&l.day>=monDay&&l.day<=monDay+6).map(l=>l.day)).size;
+      const rawPoints=daysLogged*5;
+      const type=daysLogged>=betData.pledge?'double':'zero';
+      batch.set(db.collection('bonuses_iron_pledge').doc(),{
+        player:playerName, pledge:betData.pledge, actual:daysLogged,
+        week:weekStr, groupCode, month:season.month, year:season.year, type, rawPoints,
+        calculatedAt:firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+    await batch.commit();
+    toast(`Iron Pledge results applied for ${toCalc.length} player(s).`,'success');
+  }catch(e){ logErr('calculateIronPledgeResults',e); toast('Failed to calculate — check connection.','error'); }
+}
+
+// ── SCROLL COMPRESSION ────────────────────────────────────────────────────
+function initScrollCompression(){
+  const nav=document.querySelector('#screen-app .nav');
+  if(!nav) return;
+  // Pages have overflow-y:auto — scroll events live on them, not window.
+  document.querySelectorAll('#screen-app .page').forEach(pg=>{
+    pg.addEventListener('scroll',()=>{
+      nav.classList.toggle('scrolled',pg.scrollTop>40);
+    },{passive:true});
+  });
+}
+
 // ── TABS ──────────────────────────────────────────────────────────────────
-const TABS=['home','log','lb','feed','global','admin'];
+const TABS=['home','log','lb','feed','global','admin','pledge'];
+function updateTabPill(t){
+  const pill=document.getElementById('tabPill');
+  const tabEls=document.querySelectorAll('.tabs .tab');
+  const idx=TABS.indexOf(t);
+  if(!pill||!tabEls[idx]) return;
+  const tab=tabEls[idx];
+  const tabsEl=tab.parentElement;
+  const tabsRect=tabsEl.getBoundingClientRect();
+  const tabRect=tab.getBoundingClientRect();
+  pill.style.left=(tabRect.left-tabsRect.left)+'px';
+  pill.style.width=tabRect.width+'px';
+}
 function showTab(t){
   if(t==='admin'&&!adminUnlocked){
     const pin=prompt('Enter admin PIN:');
-    if(pin!==ADMIN_PIN){alert('Wrong PIN');return;}
+    if(pin!==ADMIN_PIN){toast('Wrong PIN','error');return;}
     adminUnlocked=true;
   }
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
-  document.getElementById(`page-${t}`).classList.add('active');
+  const pg=document.getElementById(`page-${t}`);
+  if(pg) pg.classList.add('active');
   document.querySelectorAll('.tab')[TABS.indexOf(t)]?.classList.add('active');
+  updateTabPill(t);
   window.scrollTo(0,0);
+  if(navigator.vibrate) navigator.vibrate(8);
   if(t==='global') loadGlobal();
+  if(t==='pledge') renderIronPledgePage();
+  if(t==='log') buildDayStrip();
+  trackTabClick(t); // fire-and-forget — no await
+}
+
+// ── TAB ANALYTICS ─────────────────────────────────────────────────────────
+async function trackTabClick(tab){
+  if(!groupCode || !season) return;
+  const month=`${season.year}-${String(season.month).padStart(2,'0')}`;
+  const ref=db.collection('analytics').doc(groupCode).collection('tabClicks').doc(month);
+  try{
+    await ref.set({[tab]:firebase.firestore.FieldValue.increment(1)},{merge:true});
+  }catch(e){ /* silent fail — analytics must never break the app */ }
 }
 
 // dismiss cal tip on outside tap
 document.addEventListener('click',e=>{ if(!e.target.classList.contains('cd')) document.querySelectorAll('.cal-tip').forEach(t=>t.remove()); });
+</script>
+<script>
+// Register the service worker (makes Forge installable + offline-capable).
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(e=>console.warn('[Forge] SW registration failed', e));
+  });
+}
 </script>
 </body>
 </html>
