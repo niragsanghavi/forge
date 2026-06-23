@@ -50,7 +50,12 @@
 
 /* ── BASE ── */
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh;overflow-x:hidden;overscroll-behavior-y:none;transition:background .25s,color .25s;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}
+html{height:100%}
+/* Tab-app scroll model: html+body are a fixed, non-scrolling viewport; each .page
+   (and the onboard/super screens) owns its OWN scroll. This fixes Android Chrome,
+   where a flex child's overflow-y:auto is inert unless its parent has a DEFINITE
+   height — the old min-height:100vh let the page grow to content size instead. */
+body{background:var(--bg);color:var(--text);font-family:var(--font);height:100%;overflow:hidden;overscroll-behavior-y:none;transition:background .25s,color .25s;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}
 /* Ambient forge-light vignette behind everything */
 body::before{content:'';position:fixed;inset:-10%;z-index:-1;pointer-events:none;
   background:radial-gradient(52% 38% at 50% 0%,rgba(212,168,67,.07),transparent 65%),
@@ -62,8 +67,14 @@ body::before{content:'';position:fixed;inset:-10%;z-index:-1;pointer-events:none
 .theme-toggle:active{transform:scale(.88)}
 
 /* ── SCREENS ── */
-.screen{display:none;min-height:100vh}
+.screen{display:none;height:100%}
 .screen.active{display:flex;flex-direction:column}
+/* App screen: fixed-height flex column that never scrolls itself — its .page
+   children each scroll internally (definite-height parent = working overflow). */
+#screen-app{overflow:hidden}
+/* Onboarding + super-admin are single-flow screens with no .page children,
+   so they scroll as a whole now that <body> no longer scrolls. */
+#screen-onboard,#screen-super{overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain}
 
 /* ── NAV — frosted glass ── */
 .nav{background:var(--glass);backdrop-filter:blur(28px) saturate(180%);-webkit-backdrop-filter:blur(28px) saturate(180%);border-bottom:1px solid var(--hairline);padding:0 16px;padding-top:env(safe-area-inset-top);display:flex;align-items:center;justify-content:space-between;height:calc(54px + env(safe-area-inset-top));position:sticky;top:0;z-index:100;flex-shrink:0;transition:height .25s cubic-bezier(.32,.72,0,1)}
@@ -94,7 +105,7 @@ body::before{content:'';position:fixed;inset:-10%;z-index:-1;pointer-events:none
 .gs-chip.gs-add{border-style:dashed;color:var(--gold);background:transparent}
 
 /* ── PAGES ── */
-.page{display:none;padding:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom));max-width:500px;margin:0 auto;width:100%;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;scrollbar-width:none}
+.page{display:none;padding:16px;padding-bottom:calc(92px + env(safe-area-inset-bottom));max-width:500px;margin:0 auto;width:100%;flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;scrollbar-width:none}
 .page::-webkit-scrollbar{display:none}
 .page.active{display:block;animation:pageIn .42s cubic-bezier(.32,.72,0,1)}
 @keyframes pageIn{from{opacity:0;transform:translateY(16px) scale(.985)}to{opacity:1;transform:none}}
@@ -370,6 +381,7 @@ label{font-size:12px;font-weight:500;color:var(--muted);margin-bottom:5px;displa
   left:50%;transform:translateX(-50%);
   width:calc(100% - 48px);max-width:400px;
   z-index:100;border-radius:16px;margin:0;
+  pointer-events:auto; /* stay tappable above the fixed backdrop (#ls2::after is pointer-events:none) */
   transition:transform .18s cubic-bezier(.34,1.56,.64,1),filter .16s;
 }
 #subBtn:active{transform:translateX(-50%) scale(.95)!important}
