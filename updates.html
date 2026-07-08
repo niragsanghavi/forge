@@ -12,38 +12,37 @@
   weight + tracking. All original functionality is intact.
 
   ────────────────────────────────────────────────────────────────────────
-  VIDEO SHOOTING LIST — drop all of these into an `updates/` folder.
-  Each <video> degrades to a gold "Coming soon" tile if the .mp4 is missing.
-  Each video also wants a poster thumbnail: updates/{name}-thumb.jpg
+  MEDIA STATUS (Iteration 2, July 2026). All videos are preload="none" with
+  poster thumbnails (updates/{name}-thumb.jpg) — opening the page costs
+  kilobytes; nothing streams until a tile is tapped. Videos re-encoded
+  H.264 CRF 28 + faststart. Fonts: SYSTEM STACK BY DECISION (PLAN.md) —
+  Archivo/Hanken Grotesk from the 3-directions exploration is retired for
+  this page; weight + tracking carry Direction A's typographic intent.
 
-  INTRO:
-    updates/forge-loading.gif        → 1.5s intro loader; if missing, skip to landing.
+  SHOT (8 clips + 8 posters, in updates/):
+    install-homescreen, iron-pledge, weekly-twists, visual-overhaul,
+    monthly-goals, step-join-group, step-log-workout, step-leaderboard
+    (step-install.mp4 was a byte-identical duplicate of install-homescreen
+     — deduped; the guide's install step reuses install-homescreen.mp4)
 
-  WHAT'S NEW videos (in order):
-    updates/install-homescreen.mp4   → iPhone Add-to-Home-Screen flow.
-    updates/iron-pledge.mp4          → locking in a weekly pledge + progress ring.
-    updates/weekly-twists.mp4        → admin toggling the monthly twists on.
-    updates/visual-overhaul.mp4      → scrolling the redesigned home + board.
-    updates/monthly-goals.mp4        → tapping the goal ring and setting a target.
-
-  GET STARTED (guide) videos (in order):
-    updates/step-join-group.mp4      → entering a group code and joining.
-    updates/step-log-workout.mp4     → date → workout chips → FAB submit.
-    updates/step-leaderboard.mp4     → podium + individual rankings.
+  STILL TO SHOOT (tiles show "Clip coming soon" until dropped in):
     updates/step-admin.mp4           → twist toggles + role assignment.
-    updates/step-install.mp4         → Add-to-Home-Screen flow.
+    updates/season-recap.mp4         → opening the month-end recap + Share.
+    updates/profile-badges.mp4       → (optional) profile screen once shipped.
   ════════════════════════════════════════════════════════════════════════
 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Forge — What's New</title>
+<title>Forge — What’s New</title>
 <meta name="theme-color" content="#0a0a0d">
 <!-- Reuse the app's design tokens + base styles -->
 <link rel="stylesheet" href="src/style/main.css">
 <style>
 /* ── updates.html — page-specific layout (tokens come from main.css) ── */
+/* Dark by design: this page intentionally ignores the app's saved light/dark
+   theme — the Foundry hero is dark-native. Not an omission. */
 /* Single-flow landing page: scrolls natively at the document level (no fixed-height
    flex trap), so it works on Android Chrome. -webkit-overflow-scrolling:touch adds
    iOS momentum; overscroll-behavior-y stops the scroll chaining off the page. */
@@ -52,43 +51,66 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
   height:auto;overflow-y:auto;overflow-x:hidden;
   -webkit-overflow-scrolling:touch;overscroll-behavior-y:none}
 /* page-local helper aliases mapped onto the app's tokens */
-#appRoot,#loadingScreen{--gold-soft:var(--gold-l)}
-
-/* ── INTRO LOADER ── */
-#loadingScreen{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;
-  background:var(--bg);transition:opacity .4s ease}
-#loadingScreen img{max-width:160px;width:55%;height:auto}
-#appRoot{opacity:0;transition:opacity .5s ease}
+#appRoot{--gold-soft:var(--gold-l);
+  /* 8-token type scale (DESIGN_ELEVATION.md §1) — every size on the page maps
+     to one of these; no ad-hoc sizes. Hierarchy is carried by size/weight;
+     gold is reserved for status (wordmark, labels, CTA, badge), not titles. */
+  --fs-display:76px;--lh-display:68px;
+  --fs-t1:32px;--lh-t1:36px;
+  --fs-t2:20px;--lh-t2:26px;
+  --fs-t3:17px;--lh-t3:24px;
+  --fs-body:15px;--lh-body:24px;
+  --fs-s:13px;--lh-s:20px;
+  --fs-label:12px;--lh-label:16px;
+  --fs-micro:11px;--lh-micro:14px;
+  /* house easing (DESIGN_ELEVATION.md §2): decel for entrances, spring for
+     RELEASE only — presses compress plainly, objects spring back. Sheet rises
+     keep their original .32,.72,0,1. */
+  --ease-out:cubic-bezier(.22,1,.36,1);
+  --ease-spring:cubic-bezier(.3,1.4,.5,1)}
 
 /* ════ LANDING (hero wordmark + two cards) ════ */
 #landing{min-height:100vh;min-height:100dvh;max-width:480px;margin:0 auto;width:100%;
-  display:flex;flex-direction:column;position:relative;overflow:visible;transition:opacity .35s ease}
-#landing.fade-out{opacity:0;pointer-events:none}
+  display:flex;flex-direction:column;position:relative;overflow:visible}
+#landing.fade-out{pointer-events:none}   /* opacity handled by the slipOut animation */
+/* Breathing glow: effective intensity oscillates .10 -> .16 over 6s (gradient
+   is authored at .16, element opacity .625 -> 1). Frozen by reduced-motion. */
 #landing::before{content:'';position:absolute;inset:0;pointer-events:none;
-  background:radial-gradient(120% 52% at 50% 114%,rgba(212,168,67,.14),transparent 68%)}
+  background:radial-gradient(120% 52% at 50% 114%,rgba(212,168,67,.16),transparent 68%);
+  animation:heroBreathe 6s ease-in-out infinite}
+@keyframes heroBreathe{0%,100%{opacity:.625}50%{opacity:1}}
 .hero{flex:1;display:flex;flex-direction:column;justify-content:flex-end;
   padding:calc(env(safe-area-inset-top) + 24px) 30px 6px;position:relative}
-.hero-eyebrow{font-size:11px;font-weight:700;letter-spacing:.22em;color:var(--gold);margin-bottom:18px}
-.hero-word{font-weight:900;font-size:76px;line-height:.9;letter-spacing:-.045em;color:var(--gold)}
-.hero-sub{font-size:16px;color:var(--text);margin-top:16px;max-width:240px;line-height:1.45}
+.hero-eyebrow{font-size:var(--fs-micro);line-height:var(--lh-micro);font-weight:700;letter-spacing:.18em;color:var(--gold);margin-bottom:18px}
+.hero-word{font-weight:900;font-size:var(--fs-display);line-height:var(--lh-display);letter-spacing:-.045em;color:var(--gold)}
+.hero-sub{font-size:var(--fs-body);line-height:var(--lh-body);color:var(--text);margin-top:16px;max-width:260px}
+/* Latest-update row: the hero leads with the newest headline — the page's
+   TL;DR for returning users, one tap into entry #1. Populated by JS from the
+   newest month group; hidden until then. */
+.hero-latest{display:flex;align-items:center;gap:10px;margin-top:18px;padding:10px 0;width:100%;
+  background:none;border:none;font-family:inherit;text-align:left;cursor:pointer;user-select:none}
+.hero-latest[hidden]{display:none}
+.hl-label{flex:none;font-size:var(--fs-micro);line-height:var(--lh-micro);font-weight:700;
+  letter-spacing:.18em;text-transform:uppercase;color:var(--gold)}
+.hl-text{flex:0 1 auto;min-width:0;font-size:var(--fs-s);line-height:var(--lh-s);font-weight:600;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hl-chev{flex:none;color:var(--gold)}
 .landing-cards{flex:none;position:relative;display:flex;flex-direction:column;gap:12px;
   padding:26px 22px calc(32px + env(safe-area-inset-bottom))}
 /* matte raised cards — flat dark surface, top highlight + drop shadow = "out of the page" */
 .path-card{display:flex;align-items:center;gap:14px;border-radius:18px;cursor:pointer;user-select:none;
   background:var(--bg-card);border:1px solid var(--hairline);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 18px 34px -18px rgba(0,0,0,.92),0 3px 8px -3px rgba(0,0,0,.55);
-  transition:transform .16s cubic-bezier(.34,1.56,.64,1)}
-.path-card:active{transform:scale(.985)}
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 18px 34px -18px rgba(0,0,0,.92),0 3px 8px -3px rgba(0,0,0,.55)}
 .path-card.whats-new{justify-content:space-between;gap:16px;padding:20px;border-color:rgba(212,168,67,.42)}
 .path-card.new-to-forge{padding:16px 20px}
-.path-title{font-weight:800;font-size:21px;letter-spacing:-.02em;color:var(--gold)}
-.path-sub{font-size:13px;color:var(--text);margin-top:3px}
+.path-title{font-weight:800;font-size:var(--fs-t2);line-height:var(--lh-t2);letter-spacing:-.02em;color:var(--text)}
+.path-sub{font-size:var(--fs-s);line-height:var(--lh-s);color:var(--text-muted);margin-top:2px}
 .path-arrow{flex:none;width:42px;height:42px;border-radius:50%;background:var(--gold);
   display:flex;align-items:center;justify-content:center}
 .path-door{flex:none;color:var(--text-muted)}
 .ntf-mid{flex:1;min-width:0}
-.ntf-title{font-weight:700;font-size:15px;color:var(--gold)}
-.ntf-sub{font-size:12.5px;color:var(--text);margin-top:2px}
+.ntf-title{font-weight:700;font-size:var(--fs-t3);line-height:var(--lh-t3);letter-spacing:-.01em;color:var(--text)}
+.ntf-sub{font-size:var(--fs-s);line-height:var(--lh-s);color:var(--text-muted);margin-top:2px}
 .ntf-chev{flex:none;color:var(--muted)}
 
 /* ════ CONTENT SHEET ════ */
@@ -101,16 +123,25 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
   cursor:pointer;padding:8px;background:none;border:none;font-family:inherit;letter-spacing:-.01em}
 .back-btn:active{opacity:.6}
 .sec-main{padding:4px 22px calc(44px + env(safe-area-inset-bottom))}
-.sec-title{font-weight:800;font-size:30px;letter-spacing:-.03em;color:var(--gold)}
+.sec-title{font-weight:800;font-size:var(--fs-t1);line-height:var(--lh-t1);letter-spacing:-.03em;color:var(--text)}
 .sec-divider{height:1px;background:var(--hairline);margin:16px 0 22px}
-.sec-intro{font-size:14.5px;line-height:1.55;color:var(--text);margin:-8px 0 26px;max-width:340px}
+.sec-intro{font-size:var(--fs-body);line-height:var(--lh-body);color:var(--text-muted);margin:-8px 0 26px;max-width:340px}
+
+/* ── MONTH GROUP (changelog runs newest month first, older months keep their entries) ── */
+.month-head{display:flex;align-items:center;gap:12px;margin:26px 0 16px}
+.month-group:first-of-type .month-head{margin-top:0}
+.month-head-label{font-size:var(--fs-label);line-height:var(--lh-label);font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);flex:none}
+.month-head-rule{flex:1;height:1px;background:var(--hairline)}
+.up-badge-soon{display:inline-block;font-size:var(--fs-micro);line-height:var(--lh-micro);font-weight:700;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--gold);background:var(--gold-l);border:1px solid rgba(212,168,67,.45);
+  padding:3px 8px;border-radius:999px;margin-left:8px;vertical-align:2px}
 
 /* ── FEED ENTRY (matte raised box) ── */
 .up-card{background:var(--bg-card);border:1px solid var(--hairline);border-radius:16px;padding:18px;margin-bottom:18px;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 18px 34px -18px rgba(0,0,0,.92),0 3px 8px -3px rgba(0,0,0,.55)}
-.up-date{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:7px}
-.up-title{font-weight:800;font-size:20px;line-height:1.2;letter-spacing:-.02em;color:var(--gold);margin:0 0 9px}
-.up-desc{font-size:14px;line-height:1.6;color:var(--text);margin:0 0 16px}
+.up-date{font-size:var(--fs-label);line-height:var(--lh-label);font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);margin-bottom:7px}
+.up-title{font-weight:800;font-size:var(--fs-t2);line-height:var(--lh-t2);letter-spacing:-.02em;color:var(--text);margin:0 0 9px}
+.up-desc{font-size:var(--fs-body);line-height:var(--lh-body);color:var(--text);margin:0 0 16px}
 .up-desc strong{font-weight:700;color:var(--text)}
 .up-desc strong.g{color:var(--green)}
 .up-desc strong.r{color:var(--red)}
@@ -121,14 +152,16 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
   background:radial-gradient(130% 80% at 50% 0%,#1c1c22,#0b0b0e);border:1px solid var(--hairline);
   display:flex;align-items:center;justify-content:center}
 .media-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;background:transparent;border:none}
-.media-dur{position:absolute;top:9px;right:9px;font-size:10px;font-weight:700;color:var(--text-muted);
-  background:rgba(0,0,0,.55);padding:3px 7px;border-radius:999px;z-index:2;pointer-events:none;transition:opacity .2s}
+/* White on 65% black: the badge sits over arbitrary video frames, so it can't
+   rely on token contrast — muted-on-55% bottomed out near 3:1 on bright frames. */
+.media-dur{position:absolute;top:9px;right:9px;font-size:var(--fs-micro);line-height:var(--lh-micro);font-weight:700;color:#fff;
+  background:rgba(0,0,0,.65);padding:3px 7px;border-radius:999px;z-index:2;pointer-events:none;transition:opacity .2s}
 .media-tile.playing .media-dur{opacity:0}
 .media-ph{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
 .media-play{width:50px;height:50px;border-radius:50%;background:var(--gold-soft);border:1px solid rgba(212,168,67,.5);
   color:var(--gold);display:flex;align-items:center;justify-content:center}
 .media-soon{font-size:11px;font-weight:600;letter-spacing:.02em;color:var(--text)}
-.media-cap{font-size:12px;color:var(--text);text-align:center}
+.media-cap{font-size:var(--fs-s);line-height:var(--lh-s);color:var(--text-muted);text-align:center}
 
 /* ── GUIDE STEP (matte raised box) ── */
 .up-step{background:var(--bg-card);border:1px solid var(--hairline);border-radius:16px;padding:18px;margin-bottom:18px;
@@ -137,20 +170,57 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
 .up-stepnum{flex:none;width:32px;height:32px;border-radius:50%;background:var(--gold-soft);
   border:1.5px solid rgba(212,168,67,.55);color:var(--gold);display:flex;align-items:center;justify-content:center;
   font-weight:800;font-size:15px;font-variant-numeric:tabular-nums}
-.up-steptitle{font-weight:700;font-size:18px;letter-spacing:-.01em;color:var(--gold)}
-.up-stepdesc{font-size:13.5px;line-height:1.55;color:var(--text);margin:0 0 14px;padding-left:44px}
+.up-steptitle{font-weight:700;font-size:var(--fs-t3);line-height:var(--lh-t3);letter-spacing:-.01em;color:var(--text)}
+.up-stepdesc{font-size:var(--fs-s);line-height:var(--lh-s);color:var(--text);margin:0 0 14px;padding-left:44px}
 .up-step .media-wrap{padding-left:44px}
 .up-step .media-tile{width:158px}
 
 /* ── FOOTER ── */
-.up-foot{text-align:center;padding:26px 8px 8px;color:var(--text);font-size:13px;line-height:1.7}
+.up-foot{text-align:center;padding:26px 8px 8px;color:var(--text-muted);font-size:var(--fs-s);line-height:var(--lh-s)}
 .up-foot a{display:inline-block;margin-top:14px;background:linear-gradient(180deg,#e7c45c,var(--gold));
   color:#0a0a0d;text-decoration:none;font-weight:800;font-size:18px;letter-spacing:-.01em;padding:15px 32px;border-radius:14px;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 14px 28px -12px rgba(212,168,67,.55);transition:transform .16s}
-.up-foot a:active{transform:scale(.97)}
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 14px 28px -12px rgba(212,168,67,.55)}
+/* ── ACCESSIBILITY ── */
+/* One page-wide keyboard focus treatment (extends the back button's default). */
+:focus-visible{outline:2px solid var(--gold);outline-offset:3px;border-radius:4px}
+.path-card:focus-visible,.up-foot a:focus-visible{border-radius:18px}
+/* Hover states — desktop only (WhatsApp Web is a real context for this page). */
+@media (hover:hover){
+  .path-card:hover{transform:translateY(-1px);border-color:rgba(212,168,67,.5)}
+  .media-tile:hover .media-play{filter:brightness(1.25)}
+  .up-foot a:hover{filter:brightness(1.06)}
+}
+
+/* ── MOTION (all of it dies under prefers-reduced-motion below) ── */
+/* Press physics: compress fast and plain (90ms ease-out), spring on RELEASE
+   (350ms). The old build had the bounce on press-down — backwards. */
+.path-card,.media-tile,.up-foot a,.back-btn{
+  transition:transform .35s var(--ease-spring),border-color .16s ease,filter .16s ease}
+.path-card:active,.media-tile:active,.up-foot a:active{
+  transform:scale(.98);transition:transform .09s ease-out}
+.back-btn:active{transform:scale(.96);opacity:.6;transition:transform .09s ease-out}
+
+/* Entrance stagger: the first cards of each section rise in 45ms apart.
+   (First 3 per month group + all 5 guide steps — anything further down has
+   finished animating long before it's scrolled into view, so this matches
+   the "first five visible" intent with selectors that survive new months.) */
+@keyframes cardIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.month-group .up-card:nth-of-type(-n+3),#section-guide .up-step:nth-of-type(-n+5){
+  animation:cardIn .36s var(--ease-out) both}
+.month-group .up-card:nth-of-type(2),#section-guide .up-step:nth-of-type(2){animation-delay:45ms}
+.month-group .up-card:nth-of-type(3),#section-guide .up-step:nth-of-type(3){animation-delay:90ms}
+#section-guide .up-step:nth-of-type(4){animation-delay:135ms}
+#section-guide .up-step:nth-of-type(5){animation-delay:180ms}
+
+/* Poster load-in: kill the "pop" — the tile gradient is the placeholder. */
+@keyframes mediaIn{from{opacity:0}}
+.media-video{animation:mediaIn .24s ease-out}
 
 /* ── ANIMATIONS ── */
 @keyframes upSheet{from{opacity:.4;transform:translateY(22px)}to{opacity:1;transform:none}}
+/* Landing/sheet handoff: outgoing surface slips up-and-out while the incoming
+   sheet starts at 140ms — 60ms overlap, one continuous gesture, no dead gap. */
+@keyframes slipOut{to{opacity:0;transform:translateY(-8px)}}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
 }
@@ -158,28 +228,27 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
 </head>
 <body>
 
-<!-- ══ INTRO LOADER — shows forge-loading.gif for 1.5s, then fades to landing.
-     If the gif is missing, onerror calls skipLoading() → straight to landing. ══ -->
-<div id="loadingScreen">
-  <img src="updates/forge-loading.gif" alt="" onerror="skipLoading()">
-</div>
-
 <div id="appRoot">
 
   <!-- ════ LANDING — hero wordmark + two cards (What's New primary, New to Forge? below) ════ -->
   <div id="landing">
     <div class="hero">
-      <div class="hero-eyebrow">WHAT'S NEW · JUNE 2026</div>
+      <div class="hero-eyebrow" id="heroEyebrow">WHAT’S NEW</div>
       <div class="hero-word">Forge</div>
-      <div class="hero-sub">The latest on the app your group competes in.</div>
+      <div class="hero-sub">Everything new in the app your group argues about.</div>
+      <button class="hero-latest" id="heroLatest" type="button" hidden onclick="openLatest()">
+        <span class="hl-label">Latest</span>
+        <span class="hl-text" id="heroLatestText"></span>
+        <svg class="hl-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
     </div>
 
     <div class="landing-cards">
       <!-- What's New (primary, gold) → opens the changelog feed -->
-      <div class="path-card whats-new" onclick="openSection('whatsnew', this)">
+      <div class="path-card whats-new" role="button" tabindex="0" aria-label="What’s New — open the changelog" onclick="openSection('whatsnew', this)">
         <div>
-          <div class="path-title">What's New</div>
-          <div class="path-sub">5 updates this month</div>
+          <div class="path-title">What’s New</div>
+          <div class="path-sub" id="whatsNewCount">Latest updates</div>
         </div>
         <div class="path-arrow" aria-hidden="true">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0a0a0d" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
@@ -187,11 +256,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
       </div>
 
       <!-- New to Forge? (secondary) → opens the step-by-step guide -->
-      <div class="path-card new-to-forge" onclick="openSection('guide', this)">
+      <div class="path-card new-to-forge" role="button" tabindex="0" aria-label="New to Forge — open the getting-started guide" onclick="openSection('guide', this)">
         <svg class="path-door" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16M14 12h.01"/></svg>
         <div class="ntf-mid">
           <div class="ntf-title">New to Forge?</div>
-          <div class="ntf-sub">Get started in 5 steps</div>
+          <div class="ntf-sub">From group code to first log in five steps.</div>
         </div>
         <svg class="ntf-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
       </div>
@@ -211,19 +280,56 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
 
       <!-- ── SECTION: What's New (changelog feed, newest first) ── -->
       <div id="section-whatsnew" class="content-section">
-        <div class="sec-title">What's New</div>
+        <div class="sec-title">What’s New</div>
         <div class="sec-divider"></div>
-        <p class="sec-intro">Five things we shipped this month. Tap any clip to watch it in action.</p>
+        <p class="sec-intro">Newest first. Tap a clip to see it move.</p>
+
+        <!-- ── JULY 2026 ── -->
+        <div class="month-group" data-month="2026-07">
+          <div class="month-head"><span class="month-head-label">July 2026</span><span class="month-head-rule"></span></div>
+
+          <!-- Entry: Season Recap -->
+          <article class="up-card">
+            <div class="up-date">July 2026</div>
+            <h2 class="up-title">Season Recap — Your Month, Wrapped</h2>
+            <p class="up-desc">On the last evening of the month, a gold card appears on your Home screen. Tap it: winning team, top performers, your own numbers, and the achievements you earned — then <strong>share the recap image straight to the group chat</strong> so everyone knows exactly who carried.</p>
+            <!-- VIDEO (to shoot): opening the recap + tapping Share. updates/season-recap.mp4 -->
+            <div class="media-wrap">
+              <div class="media-tile">
+                <div class="media-ph"><div class="media-play"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div><div class="media-soon">Clip coming soon</div></div>
+              </div>
+              <div class="media-cap">The month-end recap</div>
+            </div>
+          </article>
+
+          <!-- Entry: Instant open / offline -->
+          <article class="up-card">
+            <div class="up-date">July 2026</div>
+            <h2 class="up-title">Forge Now Opens Instantly</h2>
+            <p class="up-desc">Your board, your streak, your calendar — cached on your phone. Forge paints immediately when you open it, then syncs in the background. Basement gym, dead spots, one bar of signal: <strong>the app shows up even when the network doesn’t.</strong></p>
+          </article>
+
+          <!-- Entry: Profiles & badges (shipping this week) -->
+          <article class="up-card">
+            <div class="up-date">July 2026 <span class="up-badge-soon">Shipping this week</span></div>
+            <h2 class="up-title">Profiles, Badges &amp; Winner’s Crowns</h2>
+            <p class="up-desc">Your streaks, stats and history are about to follow <strong>you</strong> — across every group you’re in. Season winners get a badge that lives on their profile forever, and a 🏆 next to their name all next month. Win June, wear the crown through July.</p>
+          </article>
+        </div>
+
+        <!-- ── JUNE 2026 ── -->
+        <div class="month-group" data-month="2026-06">
+          <div class="month-head"><span class="month-head-label">June 2026</span><span class="month-head-rule"></span></div>
 
         <!-- Entry 1: Install on home screen -->
         <article class="up-card">
           <div class="up-date">June 2026</div>
-          <h2 class="up-title">Install Forge on Your Phone</h2>
+          <h2 class="up-title">No App Store. No Excuses.</h2>
           <p class="up-desc">Forge lives on your home screen. Tap the share icon in your browser and select "Add to Home Screen" — it installs like a native app, no App Store needed.</p>
           <!-- VIDEO: Add to Home Screen flow on iPhone. updates/install-homescreen.mp4 -->
           <div class="media-wrap">
             <div class="media-tile">
-              <video data-vid="install-homescreen" class="media-video" controls playsinline poster="updates/install-homescreen-thumb.jpg">
+              <video data-vid="install-homescreen" class="media-video" controls playsinline preload="none" poster="updates/install-homescreen-thumb.jpg">
                 <source src="updates/install-homescreen.mp4" type="video/mp4" onerror="videoFallback(this)">
               </video>
               <span class="media-dur">0:16</span>
@@ -240,7 +346,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
           <!-- VIDEO: locking in a weekly pledge + progress ring. updates/iron-pledge.mp4 -->
           <div class="media-wrap">
             <div class="media-tile">
-              <video data-vid="iron-pledge" class="media-video" controls playsinline poster="updates/iron-pledge-thumb.jpg">
+              <video data-vid="iron-pledge" class="media-video" controls playsinline preload="none" poster="updates/iron-pledge-thumb.jpg">
                 <source src="updates/iron-pledge.mp4" type="video/mp4" onerror="videoFallback(this)">
               </video>
               <span class="media-dur">0:22</span>
@@ -257,7 +363,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
           <!-- VIDEO: admin toggling the monthly twists on. updates/weekly-twists.mp4 -->
           <div class="media-wrap">
             <div class="media-tile">
-              <video data-vid="weekly-twists" class="media-video" controls playsinline poster="updates/weekly-twists-thumb.jpg">
+              <video data-vid="weekly-twists" class="media-video" controls playsinline preload="none" poster="updates/weekly-twists-thumb.jpg">
                 <source src="updates/weekly-twists.mp4" type="video/mp4" onerror="videoFallback(this)">
               </video>
               <span class="media-dur">0:19</span>
@@ -274,7 +380,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
           <!-- VIDEO: scrolling the redesigned home + board. updates/visual-overhaul.mp4 -->
           <div class="media-wrap">
             <div class="media-tile">
-              <video data-vid="visual-overhaul" class="media-video" controls playsinline poster="updates/visual-overhaul-thumb.jpg">
+              <video data-vid="visual-overhaul" class="media-video" controls playsinline preload="none" poster="updates/visual-overhaul-thumb.jpg">
                 <source src="updates/visual-overhaul.mp4" type="video/mp4" onerror="videoFallback(this)">
               </video>
               <span class="media-dur">0:24</span>
@@ -286,12 +392,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
         <!-- Entry 5: Personal monthly goals -->
         <article class="up-card">
           <div class="up-date">June 2026</div>
-          <h2 class="up-title">Personal Monthly Goals</h2>
-          <p class="up-desc">Set the bar yourself. Tap the ring on your home screen, pick how many workouts you're aiming for this month, and watch it fill. It's between you and the ring — no one else has to know how low you set it.</p>
+          <h2 class="up-title">Set the Bar. Clear It.</h2>
+          <p class="up-desc">Set the bar yourself. Tap the ring on your home screen, pick how many workouts you’re aiming for this month, and watch it fill. It’s between you and the ring — no one else has to know how low you set it.</p>
           <!-- VIDEO: tapping the goal ring and setting a target. updates/monthly-goals.mp4 -->
           <div class="media-wrap">
             <div class="media-tile">
-              <video data-vid="monthly-goals" class="media-video" controls playsinline poster="updates/monthly-goals-thumb.jpg">
+              <video data-vid="monthly-goals" class="media-video" controls playsinline preload="none" poster="updates/monthly-goals-thumb.jpg">
                 <source src="updates/monthly-goals.mp4" type="video/mp4" onerror="videoFallback(this)">
               </video>
               <span class="media-dur">0:15</span>
@@ -299,6 +405,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
             <div class="media-cap">Setting a monthly target</div>
           </div>
         </article>
+        </div><!-- /month-group June -->
 
         <footer class="up-foot">Forged by the group.<br><a href="index.html">Open Forge →</a></footer>
       </div>
@@ -315,11 +422,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
             <div class="up-stepnum">1</div>
             <div class="up-steptitle">Join your group</div>
           </div>
-          <p class="up-stepdesc">Get the 6-character code from your group's organiser, punch it in, and pick your name from the roster.</p>
+          <p class="up-stepdesc">Get the 6-character code from your group’s organiser, punch it in, and pick your name from the roster.</p>
           <!-- VIDEO: entering a group code and joining. updates/step-join-group.mp4 -->
           <div class="media-wrap">
             <div class="media-tile">
-              <video data-vid="step-join-group" class="media-video" controls playsinline poster="updates/step-join-group-thumb.jpg">
+              <video data-vid="step-join-group" class="media-video" controls playsinline preload="none" poster="updates/step-join-group-thumb.jpg">
                 <source src="updates/step-join-group.mp4" type="video/mp4" onerror="videoFallback(this)">
               </video>
               <span class="media-dur">0:12</span>
@@ -334,16 +441,16 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
             <div class="up-stepnum">2</div>
             <div class="up-steptitle">Log a workout</div>
           </div>
-          <p class="up-stepdesc">Hit the Log tab, pick the day, tap what you did (or type your own), and lock it in. That's it — five seconds, done.</p>
+          <p class="up-stepdesc">Hit the Log tab, pick the day, tap what you did (or type your own), and lock it in. That’s it — five seconds, done.</p>
           <!-- VIDEO: date → workout chips → FAB submit. updates/step-log-workout.mp4 -->
           <div class="media-wrap">
             <div class="media-tile">
-              <video data-vid="step-log-workout" class="media-video" controls playsinline poster="updates/step-log-workout-thumb.jpg">
+              <video data-vid="step-log-workout" class="media-video" controls playsinline preload="none" poster="updates/step-log-workout-thumb.jpg">
                 <source src="updates/step-log-workout.mp4" type="video/mp4" onerror="videoFallback(this)">
               </video>
               <span class="media-dur">0:10</span>
             </div>
-            <div class="media-cap">Logging today's workout</div>
+            <div class="media-cap">Logging today’s workout</div>
           </div>
         </div>
 
@@ -357,7 +464,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
           <!-- VIDEO: podium + individual rankings. updates/step-leaderboard.mp4 -->
           <div class="media-wrap">
             <div class="media-tile">
-              <video data-vid="step-leaderboard" class="media-video" controls playsinline poster="updates/step-leaderboard-thumb.jpg">
+              <video data-vid="step-leaderboard" class="media-video" controls playsinline preload="none" poster="updates/step-leaderboard-thumb.jpg">
                 <source src="updates/step-leaderboard.mp4" type="video/mp4" onerror="videoFallback(this)">
               </video>
               <span class="media-dur">0:14</span>
@@ -370,16 +477,15 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
         <div class="up-step">
           <div class="up-step-head">
             <div class="up-stepnum">4</div>
-            <div class="up-steptitle">Running the group? Visit Admin</div>
+            <div class="up-steptitle">Running the group? This is your control room.</div>
           </div>
-          <p class="up-stepdesc">If you're the admin, the Admin tab is your control room — assign teams and roles, flip on monthly twists, and manage the season.</p>
-          <!-- VIDEO: twist toggles + role assignment. updates/step-admin.mp4 -->
+          <p class="up-stepdesc">If you’re the admin, the Admin tab is yours — assign teams and roles, flip on monthly twists, and manage the season.</p>
+          <!-- VIDEO (to shoot): twist toggles + role assignment. updates/step-admin.mp4
+               Static fallback tile until the clip exists — with preload="none" there is
+               no eager load to trigger the runtime fallback, so we author it directly. -->
           <div class="media-wrap">
             <div class="media-tile">
-              <video data-vid="step-admin" class="media-video" controls playsinline poster="updates/step-admin-thumb.jpg">
-                <source src="updates/step-admin.mp4" type="video/mp4" onerror="videoFallback(this)">
-              </video>
-              <span class="media-dur">0:18</span>
+              <div class="media-ph"><div class="media-play"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div><div class="media-soon">Clip coming soon</div></div>
             </div>
             <div class="media-cap">Twist toggles &amp; roles</div>
           </div>
@@ -392,11 +498,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);
             <div class="up-steptitle">Install Forge on your phone</div>
           </div>
           <p class="up-stepdesc">Add Forge to your home screen so it opens like a native app — tap the browser share icon, then "Add to Home Screen."</p>
-          <!-- VIDEO: Add to Home Screen flow. updates/step-install.mp4 -->
+          <!-- VIDEO: Add to Home Screen flow — same clip as the What's New entry
+               (updates/step-install.mp4 was a byte-identical duplicate; deduped). -->
           <div class="media-wrap">
             <div class="media-tile">
-              <video data-vid="step-install" class="media-video" controls playsinline poster="updates/step-install-thumb.jpg">
-                <source src="updates/step-install.mp4" type="video/mp4" onerror="videoFallback(this)">
+              <video data-vid="step-install" class="media-video" controls playsinline preload="none" poster="updates/install-homescreen-thumb.jpg">
+                <source src="updates/install-homescreen.mp4" type="video/mp4" onerror="videoFallback(this)">
               </video>
               <span class="media-dur">0:13</span>
             </div>
@@ -450,34 +557,66 @@ function videoFallback(node){
   }catch(e){ /* never break the page over a missing video */ }
 }
 
-// ── INTRO LOADER ──
-var _loadingDone = false;
-function revealLanding(){
-  if(_loadingDone) return;
-  _loadingDone = true;
-  var ls = document.getElementById('loadingScreen');
-  if(ls){ ls.style.opacity = '0'; setTimeout(function(){ ls.style.display = 'none'; }, 400); }
-  document.getElementById('appRoot').style.opacity = '1';
-}
-function skipLoading(){ revealLanding(); }           // gif missing → straight to landing
 window.addEventListener('DOMContentLoaded', function(){
-  setTimeout(revealLanding, 1500);
-  // Track every video's play event; degrade missing files to a placeholder.
+  // Live month header + entry count — a changelog with a stale hardcoded month
+  // reads as abandoned, which is worse than no changelog.
+  var MONTHS=['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];
+  var now=new Date();
+  var eyebrow=document.getElementById('heroEyebrow');
+  if(eyebrow) eyebrow.textContent='WHAT’S NEW · '+MONTHS[now.getMonth()]+' '+now.getFullYear();
+  var latestGroup=document.querySelector('.month-group');           // first group = newest
+  var countEl=document.getElementById('whatsNewCount');
+  if(latestGroup && countEl){
+    var n=latestGroup.querySelectorAll('.up-card').length;
+    countEl.textContent=n+' update'+(n===1?'':'s')+' this month';
+  }
+  // Hero latest-update row: newest entry's title, straight from the DOM the
+  // count above already reads — no new data source.
+  var latestTitle=latestGroup && latestGroup.querySelector('.up-card .up-title');
+  var latestBtn=document.getElementById('heroLatest');
+  if(latestTitle && latestBtn){
+    document.getElementById('heroLatestText').textContent=latestTitle.textContent;
+    latestBtn.hidden=false;
+  }
+  // Keyboard activation for the role="button" path cards (Enter / Space).
+  // Media tiles need no wiring: their interactivity is the native <video controls>,
+  // which is already keyboard-accessible.
+  document.querySelectorAll('.path-card[role="button"]').forEach(function(c){
+    c.addEventListener('keydown', function(e){
+      if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); this.click(); }
+    });
+  });
+  // Track every video's play event; degrade decode failures to a placeholder.
+  // Videos are preload="none": nothing is fetched until the user taps play —
+  // posters carry the visuals, so opening the page costs kilobytes, not megabytes.
   document.querySelectorAll('video[data-vid]').forEach(function(v){
     v.addEventListener('play', function(){
       trackEvent('video_' + this.dataset.vid + '_play');
       var tile = this.closest('.media-tile'); if(tile) tile.classList.add('playing');
     });
     v.addEventListener('error', function(){ videoFallback(this); }, true);  // decode/format failure
-    if(v.querySelector('source')){ v.load(); }   // kick a load so a missing source errors promptly
   });
 });
 
 // ── TWO-PATH NAVIGATION (landing → content sheet → back) ──
+// Hero latest row → What's New, pre-scrolled to entry #1 (scroll fires after
+// the sheet has begun rising so it lands smoothly, not mid-transition).
+function openLatest(){
+  trackEvent('landing_latest_tap');
+  openSection('whatsnew');
+  setTimeout(function(){
+    var first = document.querySelector('.month-group .up-card');
+    if(first) first.scrollIntoView({behavior:'smooth', block:'start'});
+  }, 480);
+}
+
+// Handoff: outgoing surface slips out over 200ms; incoming sheet starts at
+// 140ms (60ms overlap) — one continuous gesture instead of fade-stop-rise.
 function openSection(which, cardEl){
   trackEvent(which === 'whatsnew' ? 'landing_whats_new_tap' : 'landing_new_to_forge_tap');
   var landing = document.getElementById('landing');
-  landing.classList.add('fade-out');               // landing fades out
+  landing.classList.add('fade-out');
+  landing.style.animation = 'slipOut .2s ease-in both';
   setTimeout(function(){
     landing.style.display = 'none';
     document.getElementById('contentView').style.display = 'block';
@@ -490,18 +629,23 @@ function openSection(which, cardEl){
     sec.style.animation = 'none'; void sec.offsetWidth;   // restart the sheet-up animation
     sec.style.animation = 'upSheet .44s cubic-bezier(.32,.72,0,1)';
     window.scrollTo(0, 0);
-  }, 280);
+  }, 140);
 }
 function backToLanding(){
   trackEvent('back_button_tap');
-  document.getElementById('contentView').style.display = 'none';
-  document.getElementById('backBar').classList.add('hidden');
-  var landing = document.getElementById('landing');
-  landing.style.display = 'flex';
-  landing.classList.remove('fade-out');
-  landing.style.animation = 'none'; void landing.offsetWidth;
-  landing.style.animation = 'upSheet .4s cubic-bezier(.32,.72,0,1)';
-  window.scrollTo(0, 0);
+  var cv = document.getElementById('contentView');
+  cv.style.animation = 'slipOut .2s ease-in both';
+  setTimeout(function(){
+    cv.style.display = 'none';
+    cv.style.animation = '';
+    document.getElementById('backBar').classList.add('hidden');
+    var landing = document.getElementById('landing');
+    landing.style.display = 'flex';
+    landing.classList.remove('fade-out');
+    landing.style.animation = 'none'; void landing.offsetWidth;
+    landing.style.animation = 'upSheet .4s cubic-bezier(.32,.72,0,1)';
+    window.scrollTo(0, 0);
+  }, 140);
 }
 </script>
 
