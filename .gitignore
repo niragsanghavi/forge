@@ -11,3 +11,7 @@ MONETIZATION_ENGINE.md
 PERFORMANCE_SHIELD.md
 RESURRECTION_ENGINE.md
 STRATEGY_PACK.md
+AUDIT.md
+scripts/
+.firebaserc
+firebase.json
