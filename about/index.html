@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Forge — Your friend group's fitness league</title>
+<meta name="description" content="Forge turns your friend group's workouts into a monthly competition. Teams, points, streaks, one leaderboard.">
+<meta name="theme-color" content="#0a0a0d">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://goforge.in/about">
+<meta property="og:title" content="Forge — Your friend group's fitness league">
+<meta property="og:description" content="Forge turns your friend group's workouts into a monthly competition.">
+<meta property="og:image" content="https://goforge.in/about/assets/marketing/what-is-forge-1.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Forge — Your friend group's fitness league">
+<meta name="twitter:description" content="Forge turns your friend group's workouts into a monthly competition.">
+<meta name="twitter:image" content="https://goforge.in/about/assets/marketing/what-is-forge-1.png">
+<link rel="icon" href="../icon-192.png">
+<link rel="apple-touch-icon" href="../icon-180.png">
+<style>
+/* ════════════════════════════════════════════════════════════════════
+   FORGE /about — marketing page. Standalone: no dependencies, no SW.
+   Palette law: bg #0a0a0d · gold #d4a843 (hot #f0c05a) · text #f2f0ec
+   · muted #8f8d98. Placeholder frames use #101016 / #26262e (spec).
+   WhatsApp green #25D366 is the single sanctioned exemption (official
+   button only) — nothing else on the page may use it.
+   Gold-keyword rule: each display/body line carries exactly ONE gold
+   (#f0c05a) key word/phrase via <b class="gk">.
+   ════════════════════════════════════════════════════════════════════ */
+:root{
+  --bg:#0a0a0d;
+  --gold:#d4a843;
+  --gold-hot:#f0c05a;
+  --text:#f2f0ec;
+  --muted:#8f8d98;
+  --line:rgba(242,240,236,.08);
+  --gold-line:rgba(212,168,67,.32);
+  --gold-dim:rgba(212,168,67,.10);
+  --ph-bg:#101016;
+  --ph-line:#26262e;
+  --ease:cubic-bezier(.22,.61,.36,1); /* ease-out */
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{scroll-behavior:smooth;scroll-snap-type:y proximity} /* proximity, NOT mandatory — fights iOS momentum otherwise */
+html.locked, html.locked body{overflow:hidden;height:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  background:var(--bg);color:var(--text);line-height:1.6;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+a{color:inherit;text-decoration:none}
+b.gk{font-weight:inherit;color:var(--gold-hot)}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ── type scale ──────────────────────────────────────────────────── */
+.display{
+  font-weight:900;letter-spacing:-.02em;line-height:1.14;
+  font-size:clamp(1.7rem,5.4vw,2.9rem);
+}
+.label{
+  display:flex;align-items:center;justify-content:center;gap:12px;
+  font-size:11px;font-weight:500;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--muted);
+}
+.label::before{content:"";width:20px;height:1.5px;background:var(--gold)}
+
+/* ── buttons ─────────────────────────────────────────────────────── */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;text-align:center;
+  min-height:52px;padding:15px 32px;border-radius:10px;
+  font-size:13px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;
+  background:var(--gold);color:var(--bg);max-width:330px;line-height:1.5;
+  transition:background .3s var(--ease),transform .3s var(--ease),opacity .3s var(--ease);
+}
+.btn:hover{background:var(--gold-hot)}
+.btn:active{transform:translateY(1px)}
+.btn:focus-visible{outline:2px solid var(--gold-hot);outline-offset:3px}
+.btn-quiet{
+  background:transparent;color:var(--gold);
+  border:1px solid var(--gold-line);
+}
+.btn-quiet:hover{background:var(--gold-dim);color:var(--gold-hot)}
+
+/* ════════════════ A · THE GATE ════════════════ */
+.gate{
+  position:relative;min-height:100vh;min-height:100svh;
+  display:flex;align-items:center;justify-content:center;
+  padding:24px;
+}
+.stage{position:relative;width:100%;max-width:620px;height:74vh;height:74svh;max-height:680px;min-height:440px}
+.card{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:32px;text-align:center;padding:0 8px;
+  opacity:0;transform:translateY(14px);pointer-events:none;
+  transition:opacity .38s var(--ease),transform .38s var(--ease);
+}
+.card.on{opacity:1;transform:none;pointer-events:auto}
+.g-title{
+  font-weight:900;letter-spacing:-.02em;line-height:1.22;
+  font-size:clamp(1.35rem,5.2vw,2.05rem);max-width:22ch;
+}
+
+/* intro screen — its own sequential fades */
+.i-line,.i-btn{opacity:0;transform:translateY(14px);
+  transition:opacity .42s var(--ease),transform .42s var(--ease)}
+.i-line.in,.i-btn.in{opacity:1;transform:none}
+#i1{font-weight:900;letter-spacing:-.02em;line-height:1.18;
+  font-size:clamp(1.6rem,6vw,2.4rem)}
+#i2{font-size:clamp(1rem,3.7vw,1.2rem);line-height:1.55;max-width:34ch;color:var(--text);margin-top:-10px}
+
+/* chevrons — 1.5px line-work, 8px directional nudge */
+.chev{width:44px;height:44px;stroke:var(--gold);stroke-width:1.5;fill:none;
+  stroke-linecap:round;stroke-linejoin:round}
+.n-r{animation:nR 1.5s var(--ease) infinite}
+.n-u{animation:nU 1.5s var(--ease) infinite}
+.n-l{animation:nL 1.5s var(--ease) infinite}
+.n-d{animation:nD 1.5s var(--ease) infinite}
+@keyframes nR{0%,100%{transform:translateX(0)}50%{transform:translateX(8px)}}
+@keyframes nU{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes nL{0%,100%{transform:translateX(0)}50%{transform:translateX(-8px)}}
+@keyframes nD{0%,100%{transform:translateY(0)}50%{transform:translateY(8px)}}
+
+/* progress dots — 4, for the 4 memory cards */
+.dots{
+  position:absolute;left:0;right:0;bottom:12px;
+  display:flex;justify-content:center;gap:10px;
+  opacity:0;transition:opacity .38s var(--ease);
+}
+.dots.show{opacity:1}
+.dots i{width:6px;height:6px;border-radius:50%;background:var(--line);transition:background .3s var(--ease)}
+.dots i.hit{background:var(--gold)}
+
+/* ════════════════ B · THE REVEAL — 7 beats, all persist ═══════════ */
+.reveal{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:15px;text-align:center;padding:0 8px;
+  pointer-events:none;
+}
+.reveal.on{pointer-events:auto}
+.rb{opacity:0;transform:translateY(12px);
+  transition:opacity .42s var(--ease),transform .42s var(--ease)}
+.rb.in{opacity:1;transform:none}
+.rb-xl{font-weight:900;letter-spacing:-.02em;line-height:1.2;
+  font-size:clamp(1.45rem,5.2vw,2.05rem)}
+#rb1{color:var(--gold-hot)}
+.rb-md{font-size:clamp(.98rem,3.5vw,1.12rem);line-height:1.55;max-width:37ch}
+/* beat 3 renders one display step above the other reveal lines — it's the payoff */
+.rb-lg{font-weight:900;letter-spacing:-.02em;line-height:1.28;
+  font-size:clamp(1.625rem,7vw,2.125rem);max-width:22ch}
+.rb-label{font-size:11px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--muted);margin-top:6px}
+.r-btn.logged{
+  background:transparent;border:1px solid var(--gold-line);color:var(--gold);
+  text-transform:none;letter-spacing:.02em;font-size:15px;cursor:default;
+}
+.r-btn.logged:hover{background:transparent}
+/* desktop (≥768px) congrats swap — replaces the in-place button morph */
+.congrats{display:none;opacity:0;transform:translateY(12px);
+  transition:opacity .42s var(--ease),transform .42s var(--ease);
+  font-weight:900;letter-spacing:-.02em;line-height:1.3;
+  font-size:clamp(1.3rem,4.4vw,1.9rem);max-width:26ch;min-height:52px}
+.congrats.show{display:block}
+.congrats.in{opacity:1;transform:none}
+
+/* scroll cue — appears with the congrats moment, dies on first scroll */
+.cue{position:absolute;left:0;right:0;bottom:16px;
+  display:flex;flex-direction:column;align-items:center;gap:7px;
+  opacity:0;transition:opacity .5s var(--ease);pointer-events:none}
+.cue.show{opacity:1}
+.cue.gone{opacity:0}
+.cue svg{width:22px;height:22px;stroke:var(--gold);stroke-width:1.5;fill:none;
+  stroke-linecap:round;stroke-linejoin:round;animation:cuePulse 2s var(--ease) infinite}
+.cue span{font-size:10px;font-weight:500;letter-spacing:.28em;text-transform:uppercase;color:var(--muted)}
+@keyframes cuePulse{0%,100%{transform:translateY(0);opacity:.55}50%{transform:translateY(6px);opacity:1}}
+
+/* ════════════════ C · MAIN PAGE ════════════════ */
+.sec{
+  max-width:720px;margin:0 auto;padding:96px 24px;
+  text-align:center;
+}
+.sec .display{margin-top:26px}
+.sec-sub{color:var(--muted);font-size:16px;margin-top:18px}
+.lead{margin-top:26px;font-weight:900;letter-spacing:-.02em;
+  font-size:clamp(1.4rem,4.4vw,1.9rem)}
+
+/* scroll reveal — fade + small translate only */
+.rv{opacity:0;transform:translateY(18px);
+  transition:opacity .5s var(--ease),transform .5s var(--ease)}
+.rv.in{opacity:1;transform:none}
+
+/* image placeholders — 1px #26262e frame on #101016, labeled until the
+   real asset lands at the wired path (img covers the label once it loads) */
+.ph{position:relative;background:var(--ph-bg);border:1px solid var(--ph-line);
+  border-radius:12px;overflow:hidden}
+.ph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1}
+.ph figcaption{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  padding:8px;font-size:10.5px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--muted);text-align:center}
+.ph169{aspect-ratio:16/9}
+.ph1x1{aspect-ratio:1/1}
+
+/* ── FULL-SCREEN SCROLL JOURNEY (What is Forge → Points → Streaks → Board) ──
+   85svh sections snapping on the root proximity container; the next section's
+   label peeks in the remaining ~15svh so the continuation is obvious. */
+.jsec{min-height:85vh;min-height:85svh;scroll-snap-align:start;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:24px;padding:44px 24px 30px;text-align:center}
+.j-img{height:55vh;height:55svh;width:100%;max-width:960px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
+.j-img figure{position:relative;background:var(--ph-bg);border:1px solid var(--ph-line);
+  border-radius:14px;overflow:hidden;max-width:100%;max-height:100%}
+.j-img img{display:block;max-width:100%;max-height:100%;object-fit:contain}
+.j-title{font-weight:900;letter-spacing:-.02em;line-height:1.18;
+  font-size:clamp(1.4rem,4.6vw,2.1rem);max-width:24ch}
+.j-sub{color:var(--muted);font-size:15px;max-width:42ch;line-height:1.55}
+
+/* events — one line, nothing more */
+.events{padding-top:110px;padding-bottom:36px}
+
+/* ── HAMMER & ANVIL SCROLL RAIL — whisper-thin, right edge ── */
+.rail{position:fixed;right:10px;top:50%;transform:translateY(-50%);
+  width:24px;height:55vh;height:55svh;z-index:60;pointer-events:none}
+.rail-track{position:absolute;left:50%;top:2px;bottom:28px;width:1px;
+  margin-left:-.5px;background:rgba(242,240,236,.10)}
+.rail-hammer{position:absolute;left:0;top:0;width:24px;height:24px;
+  stroke:var(--gold);stroke-width:1.5;fill:none;stroke-linecap:round;stroke-linejoin:round;
+  will-change:transform}
+.rail-anvil{position:absolute;left:0;bottom:0;width:24px;height:24px;
+  stroke:var(--muted);stroke-width:1.5;fill:none;stroke-linecap:round;stroke-linejoin:round;opacity:.75}
+.rail-struck{position:absolute;left:0;bottom:0;width:24px;height:44px;display:none;
+  stroke:var(--gold-hot);stroke-width:1.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.rail.struck .rail-hammer,.rail.struck .rail-track,.rail.struck .rail-anvil{display:none}
+.rail.struck .rail-struck{display:block}
+html.locked .rail{display:none}
+@media(max-width:369px),(prefers-reduced-motion:reduce){.rail{display:none}}
+
+/* live counter strip */
+.stats{display:flex;justify-content:center;gap:52px;padding-top:110px;padding-bottom:0}
+.stat{text-align:center}
+.stat-n{font-weight:900;letter-spacing:-.02em;color:var(--gold-hot);
+  font-size:clamp(2.1rem,8vw,3.2rem);line-height:1.1;font-variant-numeric:tabular-nums}
+.stat-l{margin-top:8px;font-size:11px;font-weight:500;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--muted)}
+
+/* group-chat carousel — native scroll-snap, one centered slide, neighbors peek */
+.chats{padding-top:56px}
+.caro{margin:36px -24px 0}
+.caro-track{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;
+  padding:6px calc(50% - 150px) 16px;scrollbar-width:none}
+.caro-track::-webkit-scrollbar{display:none}
+.caro-track.noSnap{scroll-snap-type:none}
+.slide{flex:0 0 300px;scroll-snap-align:center;aspect-ratio:9/16;
+  border-radius:14px;box-shadow:0 14px 40px rgba(0,0,0,.5)}
+/* crossfading captions — fixed-height zone under the centered slide */
+.caro-caps{position:relative;max-width:300px;margin:16px auto 0;min-height:82px}
+.caro-cap{position:absolute;left:0;right:0;top:0;text-align:center;color:var(--muted);
+  font-size:13px;line-height:1.5;opacity:0;transition:opacity .35s var(--ease)}
+.caro-cap.on{opacity:1}
+.caro-dots{display:flex;justify-content:center;gap:9px;margin-top:10px}
+.caro-dots button{width:6px;height:6px;border-radius:50%;background:var(--line);
+  border:0;padding:0;cursor:pointer;transition:background .35s var(--ease)}
+.caro-dots button.on{background:var(--gold)}
+.caro-dots button:focus-visible,.caro-track:focus-visible{outline:2px solid var(--gold-hot);outline-offset:3px}
+
+/* CTA */
+.cta{padding-top:110px;padding-bottom:110px}
+.cta .btn{margin-top:38px}
+.quiet-link{
+  display:inline-block;margin-top:26px;color:var(--muted);font-size:14px;
+  border-bottom:1px solid var(--line);padding-bottom:2px;
+  transition:color .3s var(--ease),border-color .3s var(--ease);
+}
+.quiet-link:hover{color:var(--gold-hot);border-color:var(--gold-line)}
+
+/* ════════════════ D · WHATSAPP CTA ════════════════ */
+.wa{max-width:720px;margin:0 auto;padding:0 24px 96px;text-align:center}
+.wa-sub{color:var(--muted);font-size:15px}
+.wa a{display:inline-block;margin-top:26px;transition:opacity .3s var(--ease)}
+.wa a:hover{opacity:.88}
+.wa img{height:56px;width:auto;display:inline-block}
+.wa-fallback{display:none}
+.wa-fallback svg{display:block;height:56px;width:auto}
+
+/* ════════════════ E · FOOTER STRIP ════════════════ */
+.foot{border-top:1px solid var(--line);padding:56px 24px 64px;text-align:center}
+.pills{display:flex;flex-wrap:wrap;justify-content:center;gap:12px}
+.pill{
+  display:inline-flex;align-items:center;gap:10px;
+  padding:12px 20px;border:1px solid var(--line);border-radius:999px;
+  color:var(--muted);font-size:12.5px;letter-spacing:.04em;cursor:default;
+}
+.pill svg{width:16px;height:16px;stroke:var(--muted);stroke-width:1.5;fill:none;
+  stroke-linecap:round;stroke-linejoin:round}
+.foot-line{
+  margin-top:44px;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;
+  gap:8px 14px;color:var(--muted);font-size:13px;
+}
+.wordmark{font-weight:900;letter-spacing:.3em;font-size:13px;color:var(--text)}
+.foot-line a{transition:color .3s var(--ease)}
+.foot-line a:hover{color:var(--gold-hot)}
+.foot-dot{opacity:.45}
+.ig{display:inline-flex;vertical-align:middle}
+.ig svg{width:16px;height:16px;stroke:currentColor;stroke-width:1.5;fill:none;
+  stroke-linecap:round;stroke-linejoin:round}
+
+/* ── desktop ─────────────────────────────────────────────────────── */
+@media(min-width:768px){
+  .j-img{height:60vh;height:60svh}
+  .j-img.two{flex-direction:row;gap:18px}
+  .j-img.two figure{flex:1;min-width:0}
+}
+@media(min-width:900px){
+  .sec{padding:130px 24px}
+  .stats{padding-top:130px;padding-bottom:0;gap:88px}
+  .chats{padding-top:64px}
+  /* container sized so each neighbor peeks ~8%: C=(W+2g)/0.84 with W=340,g=16 */
+  .caro{max-width:443px;margin:40px auto 0}
+  .caro-track{gap:16px;padding-inline:calc(50% - 170px)}
+  .slide{flex-basis:340px}
+  .caro-caps{max-width:340px;min-height:70px}
+  .cta{padding-top:150px;padding-bottom:150px}
+  .events{padding-top:130px;padding-bottom:40px}
+  .wa{padding-bottom:130px}
+}
+
+/* ── reduced motion: no nudge, near-instant fades, no translates ─── */
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .n-r,.n-u,.n-l,.n-d,.cue svg{animation:none}
+  .card,.i-line,.i-btn,.rb,.rv,.dots,.congrats,.cue{transition-duration:.01ms;transform:none}
+  .card{transform:none}
+}
+</style>
+</head>
+<body>
+
+<h1 class="vh">Forge &mdash; your friend group&rsquo;s fitness league</h1>
+
+<!-- ════════════════ A · THE GATE ════════════════ -->
+<section class="gate" id="gate" aria-label="Introduction">
+  <div class="stage">
+
+    <!-- intro screen — two sequential fade-ins, then BEGIN -->
+    <div class="card on" data-i="0">
+      <p class="i-line" id="i1">Welcome to <b class="gk">Forge</b>.</p>
+      <p class="i-line" id="i2">We&rsquo;ve built <b class="gk">image recognition</b> that can tell what you&rsquo;re looking at. Don&rsquo;t believe us? One round of our memory game &mdash; prove us wrong.</p>
+      <button class="btn i-btn" id="beginBtn" data-next>Begin</button>
+    </div>
+
+    <div class="card" data-i="1">
+      <svg class="chev n-r" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+      <p class="g-title">First, memorise the first object that you see on your <b class="gk">right</b>.</p>
+      <button class="btn btn-quiet" data-next>Got it</button>
+    </div>
+
+    <div class="card" data-i="2">
+      <svg class="chev n-u" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 15l7-7 7 7"/></svg>
+      <p class="g-title">Do you see the round object right <b class="gk">above</b> you? Sky or ceiling &mdash; look up.</p>
+      <button class="btn btn-quiet" data-next>Got it</button>
+    </div>
+
+    <div class="card" data-i="3">
+      <svg class="chev n-l" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+      <p class="g-title">Almost done, the furthest thing to your <b class="gk">left</b> &mdash; what is it? Lock this object in your head.</p>
+      <button class="btn btn-quiet" data-next>Got it</button>
+    </div>
+
+    <div class="card" data-i="4">
+      <svg class="chev n-d" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9l7 7 7-7"/></svg>
+      <p class="g-title">Our camera spotted something suspicious on the <b class="gk">ground</b>. Do you see it? If not, just remember the colour of your footwear.</p>
+      <button class="btn btn-quiet" data-next>Got it</button>
+    </div>
+
+    <!-- question screen — no chevron -->
+    <div class="card" data-i="5">
+      <p class="g-title">Do you remember all <b class="gk">four objects</b>?</p>
+      <button class="btn btn-quiet" data-next>I do</button>
+    </div>
+
+    <!-- ════════════════ B · THE REVEAL — 7 beats ════════════════ -->
+    <div class="reveal" id="reveal">
+      <p class="rb rb-xl" id="rb1">Great.</p>
+      <p class="rb rb-xl">It&rsquo;s <b class="gk">irrelevant</b>.</p>
+      <p class="rb rb-lg">But guess who just fooled you into doing your first <b class="gk">neck stretches</b> for the day?</p>
+      <p class="rb rb-md">Being on this website for just 20 seconds already made you a <b class="gk">fitter person</b> than you were 20 seconds ago.</p>
+      <p class="rb rb-md">There&rsquo;s no camera. No AI. Just <b class="gk">you &mdash; moving</b>. That&rsquo;s the whole secret.</p>
+      <p class="rb rb-label">To know more:</p>
+      <button class="btn rb r-btn" id="logBtn">Log this workout and begin your journey</button>
+      <p class="congrats" id="congratsLine">Congratulations on starting this journey &mdash; <b class="gk">Workout &#8470;1</b>, logged.</p>
+    </div>
+
+    <div class="dots" id="dots" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  </div>
+
+  <!-- scroll cue — shown at the congrats moment, dies on first scroll -->
+  <div class="cue" id="cue" aria-hidden="true">
+    <svg viewBox="0 0 24 24"><path d="M5 9l7 7 7-7"/></svg>
+    <span>Scroll</span>
+  </div>
+</section>
+
+<!-- ════════════════ C · MAIN PAGE ════════════════ -->
+<main id="content">
+
+  <!-- ════════ SCROLL JOURNEY · 1/4 — WHAT IS FORGE ════════ -->
+  <section class="jsec">
+    <div class="label">What is Forge</div>
+    <div class="j-img two">
+      <figure>
+        <img src="assets/marketing/what-is-forge-1.png" loading="lazy" alt="Forge team standings" onerror="this.style.display='none'">
+      </figure>
+      <figure>
+        <img src="assets/marketing/what-is-forge-2.png" loading="lazy" alt="Forge activity feed" onerror="this.style.display='none'">
+      </figure>
+    </div>
+    <h2 class="j-title">Forge turns your friend group&rsquo;s workouts into a monthly <b class="gk">competition</b>.</h2>
+    <p class="j-sub">Real people. Real <b class="gk">rivalry</b>. Every workout counts.</p>
+  </section>
+
+  <!-- ════════ 2/4 — POINTS ════════ -->
+  <section class="jsec">
+    <div class="label">How it works &middot; Points</div>
+    <div class="j-img">
+      <figure>
+        <img src="assets/marketing/feature-points.png" loading="lazy" alt="Forge points board" onerror="this.style.display='none'">
+      </figure>
+    </div>
+    <h2 class="j-title">You compete in <b class="gk">teams</b>.</h2>
+    <p class="j-sub">Every workout you log scores <b class="gk">points</b> for your team.</p>
+  </section>
+
+  <!-- ════════ 3/4 — STREAKS ════════ -->
+  <section class="jsec">
+    <div class="label">How it works &middot; Streaks</div>
+    <div class="j-img">
+      <figure>
+        <img src="assets/marketing/feature-streaks.png" loading="lazy" alt="Forge streak card" onerror="this.style.display='none'">
+      </figure>
+    </div>
+    <h2 class="j-title">Show up consistently and your <b class="gk">streak</b> grows.</h2>
+  </section>
+
+  <!-- ════════ 4/4 — LEADERBOARD ════════ -->
+  <section class="jsec">
+    <div class="label">How it works &middot; Leaderboard</div>
+    <div class="j-img">
+      <figure>
+        <img src="assets/marketing/feature-leaderboard.png" loading="lazy" alt="Forge leaderboard" onerror="this.style.display='none'">
+      </figure>
+    </div>
+    <h2 class="j-title"><b class="gk">Live ranks</b> all month.</h2>
+    <p class="j-sub">New season, new teams, every month.</p>
+  </section>
+
+  <!-- ════════ EVENTS — one line, nothing more ════════ -->
+  <section class="sec events">
+    <h2 class="display rv">And beyond the app &mdash; <b class="gk">events</b>.</h2>
+    <p class="sec-sub rv">Tournaments, game nights, challenges &mdash; tailored to your group&rsquo;s level. Coming to your city.</p>
+  </section>
+
+  <!-- ════════════════ LIVE COUNTERS ════════════════ -->
+  <section class="sec stats" id="statStrip" aria-label="Forge in numbers">
+    <div class="stat rv"><div class="stat-n" id="statLogs">&mdash;</div><div class="stat-l">Workouts logged</div></div>
+    <div class="stat rv"><div class="stat-n" id="statUsers">&mdash;</div><div class="stat-l">Athletes competing</div></div>
+  </section>
+
+  <!-- ════════════════ GROUP-CHAT CAROUSEL ════════════════ -->
+  <section class="sec chats">
+    <div class="label rv">From the group chats</div>
+    <div class="caro rv">
+      <div class="caro-track" id="caroTrack" tabindex="0" role="region" aria-roledescription="carousel" aria-label="Screenshots from Forge group chats — use arrow keys to browse">
+        <figure class="ph slide"><img src="assets/marketing/wa-chat-1.png" loading="lazy" alt="WhatsApp group chat where every uploaded workout collects applause reactions" onerror="this.style.display='none'"><figcaption>wa-chat-1.png</figcaption></figure>
+        <figure class="ph slide"><img src="assets/marketing/wa-chat-2.png" loading="lazy" alt="Group chat rallying teammates as the month-end points race tightens" onerror="this.style.display='none'"><figcaption>wa-chat-2.png</figcaption></figure>
+        <figure class="ph slide"><img src="assets/marketing/wa-chat-3.png" loading="lazy" alt="Group chat conversation sparked by a shared workout photo" onerror="this.style.display='none'"><figcaption>wa-chat-3.png</figcaption></figure>
+        <figure class="ph slide"><img src="assets/marketing/wa-chat-4.png" loading="lazy" alt="Group chat celebrating the jump in monthly workouts per person" onerror="this.style.display='none'"><figcaption>wa-chat-4.png</figcaption></figure>
+        <figure class="ph slide"><img src="assets/marketing/wa-chat-5.png" loading="lazy" alt="Group chat members reacting to each other doing the same workout" onerror="this.style.display='none'"><figcaption>wa-chat-5.png</figcaption></figure>
+      </div>
+      <div class="caro-caps" aria-live="polite">
+        <p class="caro-cap" id="capA"></p>
+        <p class="caro-cap" id="capB"></p>
+      </div>
+      <div class="caro-dots" id="caroDots"></div>
+    </div>
+  </section>
+
+  <section class="sec cta">
+    <h2 class="display rv">Bring your <b class="gk">group</b>.</h2>
+    <div class="rv">
+      <a class="btn" href="mailto:team@goforge.in?subject=Starting%20a%20Forge%20group&body=Hi%20-%20I%20want%20to%20start%20a%20Forge%20group%20for%20my%20crew.">Start your group</a>
+    </div>
+    <div class="rv">
+      <a class="quiet-link" href="https://www.instagram.com/go.forge/" target="_blank" rel="noopener">See it in action on Instagram</a>
+    </div>
+  </section>
+
+  <!-- ════════════════ D · WHATSAPP CTA ════════════════ -->
+  <section class="wa rv">
+    <p class="wa-sub">For more information, <b class="gk">drop a text</b> &mdash; happy to explain further.</p>
+    <a aria-label="Chat on WhatsApp" href="https://wa.me/919870000217?text=Hi!%20I%20found%20Forge%20at%20goforge.in%20and%20want%20to%20know%20more."><img alt="Chat on WhatsApp" loading="lazy" src="assets/marketing/WhatsAppButtonGreenLarge.png" onerror="this.style.display='none';document.getElementById('waFallback').style.display='inline-block'" /><span class="wa-fallback" id="waFallback"><!--
+      Faithful recreation of WhatsApp's official "Chat on WhatsApp" green
+      button (asset not fetchable at build time). Drop the official
+      WhatsAppButtonGreenLarge.png into assets/marketing/ and this SVG
+      auto-retires. #25D366 is the sanctioned exemption to the one-accent
+      rule; used nowhere else.
+      --><svg viewBox="0 0 292 60" role="img" aria-hidden="true" focusable="false">
+        <rect x="0" y="0" width="292" height="60" rx="30" fill="#25D366"/>
+        <g transform="translate(20,14) scale(0.0625)" fill="#fff">
+          <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/>
+        </g>
+        <text x="62" y="38" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="19" font-weight="600" fill="#fff">Chat on WhatsApp</text>
+      </svg></span></a>
+  </section>
+
+  <!-- ════════════════ E · FOOTER STRIP ════════════════ -->
+  <footer class="foot">
+    <div class="pills rv">
+      <span class="pill">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.8 8.2c-1.2-.1-2.3.7-3.8.7s-2.5-.7-3.7-.7c-1.9.1-4.1 1.7-4.1 5 0 3.4 2.6 7.6 4.6 7.6 1 0 1.7-.7 3.2-.7s2.1.7 3.2.7c2 0 4.6-4.2 4.6-7.6 0-3.3-2.2-4.9-4-5z"/><path d="M12.3 7.5c-.3-1.9.9-3.7 2.8-4.1.3 1.9-1 3.7-2.8 4.1z"/></svg>
+        App Store &mdash; Coming soon
+      </span>
+      <span class="pill">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 4.6v14.8c0 .7.8 1.2 1.4.8l12.3-7.4c.6-.4.6-1.2 0-1.6L7.9 3.8c-.6-.4-1.4.1-1.4.8z"/></svg>
+        Google Play &mdash; Coming soon
+      </span>
+    </div>
+    <div class="foot-line">
+      <span class="wordmark">FORGE</span>
+      <span class="foot-dot">&middot;</span>
+      <a href="mailto:team@goforge.in">team@goforge.in</a>
+      <span class="foot-dot">&middot;</span>
+      <a class="ig" href="https://www.instagram.com/go.forge/" target="_blank" rel="noopener" aria-label="Forge on Instagram">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4.5"/><circle cx="12" cy="12" r="3.6"/><path d="M16.6 7.4h.01"/></svg>
+      </a>
+      <span class="foot-dot">&middot;</span>
+      <span>&copy; 2026</span>
+    </div>
+  </footer>
+</main>
+
+<!-- ════════ HAMMER & ANVIL SCROLL RAIL — whisper-thin progress, right edge ════════ -->
+<div class="rail" id="rail" aria-hidden="true">
+  <svg class="rail-hammer" viewBox="0 0 24 24"><rect x="6" y="13" width="12" height="6" rx="1"/><path d="M12 13V4"/></svg>
+  <div class="rail-track"></div>
+  <svg class="rail-anvil" viewBox="0 0 24 24"><path d="M3.5 8h12c2.6 0 4.4-.9 5-2.3"/><path d="M7 8c0 2.8 2 4.3 4.8 4.3v3.2H8.6L7.4 18h9.2l-1.2-2.5h-3.2"/></svg>
+  <svg class="rail-struck" viewBox="0 0 24 44">
+    <!-- one static celebratory frame: hammer touching anvil, spark strokes -->
+    <rect x="7" y="20" width="10" height="5" rx="1"/><path d="M12 20v-9"/>
+    <path d="M3.5 22l-2.5-2.5M20.5 22l2.5-2.5M3 30l-2.5 2M21 30l2.5 2M12 8V5"/>
+    <path d="M3.5 26h12c2.6 0 4.4-.9 5-2.3"/>
+    <path d="M7 26c0 2.8 2 4.3 4.8 4.3v3.2H8.6L7.4 36h9.2l-1.2-2.5h-3.2"/>
+  </svg>
+</div>
+
+<script>
+(function(){
+'use strict';
+var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+var docEl = document.documentElement;
+var content = document.getElementById('content');
+var cards = Array.prototype.slice.call(document.querySelectorAll('.card'));
+var dots = document.getElementById('dots');
+var dotEls = Array.prototype.slice.call(dots.children);
+var reveal = document.getElementById('reveal');
+var beats = Array.prototype.slice.call(document.querySelectorAll('.rb'));
+var logBtn = document.getElementById('logBtn');
+var idx = 0;
+
+/* Gate is JS-gated: without JS the page is a plain scrollable document. */
+docEl.classList.add('locked');
+content.setAttribute('inert','');
+
+/* intro screen — line 1, line 2 (~1s later), then BEGIN */
+setTimeout(function(){ document.getElementById('i1').classList.add('in'); }, 300);
+setTimeout(function(){ document.getElementById('i2').classList.add('in'); }, 1400);
+setTimeout(function(){ document.getElementById('beginBtn').classList.add('in'); }, 2500);
+
+function show(n){
+  cards[idx].classList.remove('on');
+  idx = n;
+  cards[idx].classList.add('on');
+  if(n >= 1 && n <= 4){
+    dots.classList.add('show');
+    dotEls.forEach(function(d,i){ d.classList.toggle('hit', i <= n-1); });
+  }else{
+    dots.classList.remove('show');
+  }
+}
+
+function startReveal(){
+  cards[idx].classList.remove('on');
+  dots.classList.remove('show');
+  reveal.classList.add('on');
+  /* 7 beats, each persists. Pacing per script: 1.2s, 1.2s, then a deliberate
+     3s hold on the neck-stretches payoff, 1.5s, 1.2s, then label -> button. */
+  var delays=[300, 1500, 2700, 5700, 7200, 8400, 9300];
+  beats.forEach(function(b,i){
+    setTimeout(function(){ b.classList.add('in'); }, delays[i]);
+  });
+}
+
+cards.forEach(function(card, n){
+  var btn = card.querySelector('[data-next]');
+  btn.addEventListener('click', function(){
+    if(n < 5) show(n+1);
+    else startReveal();
+  });
+});
+
+var cue = document.getElementById('cue');
+function releasePage(){
+  docEl.classList.remove('locked');
+  content.removeAttribute('inert');
+  content.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' });
+}
+logBtn.addEventListener('click', function(){
+  if(logBtn.classList.contains('logged') || logBtn.dataset.done) return;
+  logBtn.dataset.done = '1';
+  cue.classList.add('show');
+  if(window.matchMedia('(min-width:768px)').matches){
+    /* desktop: button fades out COMPLETELY, then a display line takes its
+       place — no in-place morph, no overlapping text */
+    var congrats = document.getElementById('congratsLine');
+    logBtn.style.transition = 'opacity .25s cubic-bezier(.22,.61,.36,1)';
+    logBtn.style.opacity = '0';
+    setTimeout(function(){
+      logBtn.style.display = 'none';
+      congrats.classList.add('show');
+      requestAnimationFrame(function(){ requestAnimationFrame(function(){
+        congrats.classList.add('in');
+      }); });
+      setTimeout(releasePage, reduced ? 300 : 1400);
+    }, reduced ? 0 : 250);
+  } else {
+    /* mobile: current behavior, unchanged */
+    logBtn.style.opacity = '0';
+    setTimeout(function(){
+      logBtn.classList.add('logged');
+      logBtn.textContent = 'Workout №1 — logged.';
+      logBtn.style.opacity = '1';
+      logBtn.setAttribute('aria-disabled','true');
+    }, reduced ? 0 : 180);
+    setTimeout(releasePage, reduced ? 300 : 1150);
+  }
+});
+/* the cue dies permanently on the first scroll event */
+window.addEventListener('scroll', function once(){
+  cue.classList.add('gone');
+  window.removeEventListener('scroll', once);
+}, {passive:true});
+
+/* scroll reveal for main sections — fade + 18px rise, once */
+var io = new IntersectionObserver(function(entries){
+  entries.forEach(function(e){
+    if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); }
+  });
+},{ threshold: 0.15 });
+document.querySelectorAll('.rv').forEach(function(el){ io.observe(el); });
+
+/* ── LIVE COUNTERS — exactly ONE Firestore read per session ──────────────
+   stats/global via plain REST (no SDK), cached in sessionStorage so repeat
+   navigations cost zero reads. >2.5s / error / zero → baked prod fallback
+   with a "+" suffix. The strip never shows 0 and never looks broken. */
+(function(){
+  var FB = { l:686, u:51 };  /* real prod totals, 2026-07-14 (fallback only) */
+  var IS_STAGING = location.hostname==='localhost' || location.hostname==='127.0.0.1' ||
+                   location.pathname.indexOf('forge-staging') !== -1;
+  var P = IS_STAGING
+    ? { pid:'forge-staging-865ff', key:'AIzaSyD-bFi6X9Hevwmg-p65ajz35G64wco90CA' }
+    : { pid:'forge-25c8c',         key:'AIzaSyCIXojxM6N6f6kp10g7zYV5XYTyLJ6pz2g' };
+  var got=null, visible=false, ran=false;
+  var fmt=function(n){ return n.toLocaleString('en-IN'); };
+
+  function setVals(l,u,plus){ if(got) return; got={l:l,u:u,plus:!!plus}; maybeRun(); }
+  function maybeRun(){
+    if(ran || !visible || !got) return; ran=true;
+    countUp(document.getElementById('statLogs'),  got.l, got.plus);
+    countUp(document.getElementById('statUsers'), got.u, got.plus);
+  }
+  function countUp(el,target,plus){
+    var D = reduced ? 0 : 1200, t0=null;
+    if(D===0){ el.textContent = fmt(target)+(plus?'+':''); return; }
+    requestAnimationFrame(function step(ts){
+      if(t0===null) t0=ts;
+      var p=Math.min(1,(ts-t0)/D), e=1-Math.pow(1-p,3);
+      el.textContent = fmt(Math.round(target*e)) + (plus && p===1 ? '+' : '');
+      if(p<1) requestAnimationFrame(step);
+    });
+  }
+
+  try{
+    var c=sessionStorage.getItem('forge_stats_v1');
+    if(c){ var j=JSON.parse(c); if(j && j.l>0 && j.u>0) setVals(j.l, j.u, false); }
+  }catch(e){}
+  if(!got){
+    var ac = ('AbortController' in window) ? new AbortController() : null;
+    var tm = setTimeout(function(){ if(ac) ac.abort(); else setVals(FB.l,FB.u,true); }, 2500);
+    fetch('https://firestore.googleapis.com/v1/projects/'+P.pid+
+          '/databases/(default)/documents/stats/global?key='+P.key+
+          '&mask.fieldPaths=totalLogs&mask.fieldPaths=totalUsers',
+          ac ? {signal:ac.signal} : {})
+      .then(function(r){ if(!r.ok) throw 0; return r.json(); })
+      .then(function(j){
+        clearTimeout(tm);
+        var l=parseInt(j.fields.totalLogs.integerValue,10),
+            u=parseInt(j.fields.totalUsers.integerValue,10);
+        if(!(l>0) || !(u>0)) throw 0;                 /* never show 0 */
+        try{ sessionStorage.setItem('forge_stats_v1', JSON.stringify({l:l,u:u})); }catch(e){}
+        setVals(l,u,false);
+      })
+      .catch(function(){ clearTimeout(tm); setVals(FB.l,FB.u,true); });
+  }
+  new IntersectionObserver(function(es,o){
+    es.forEach(function(e){ if(e.isIntersecting){ visible=true; o.unobserve(e.target); maybeRun(); } });
+  },{ threshold:0.3 }).observe(document.getElementById('statStrip'));
+})();
+
+/* ── GROUP-CHAT CAROUSEL — infinite circular loop. Clone of the last slide
+   sits before slide 1 and a clone of the first sits after slide 5, so the
+   loop reads circular from the first frame (slide 5 peeking left, slide 2
+   right). When a clone settles, an instant unanimated jump re-centers on
+   its real twin — no visible snap-back, both directions, swipe and auto.
+   Dots and captions always map to the REAL slide index. ── */
+(function(){
+  var track=document.getElementById('caroTrack');
+  var CAPS=[
+    'Workouts are more motivating when your group <b class="gk">applauds</b> every one you upload.',
+    'Competition gets aggressive toward month-end. Everyone wants the <b class="gk">champion crown</b>.',
+    'Every workout shared is an excuse for a <b class="gk">conversation</b>. Groups get more involved than they&rsquo;ve ever been.',
+    'Before Forge, this group averaged 10 monthly workouts per person. After? 22. That&rsquo;s not a jump &mdash; <b class="gk">that&rsquo;s a leap</b>.',
+    'Someone somewhere is doing the same workout as you. Why not <b class="gk">share the space</b>?'
+  ];
+  var real=Array.prototype.slice.call(track.children), N=real.length;
+  var cLast=real[N-1].cloneNode(true), cFirst=real[0].cloneNode(true);
+  [cLast,cFirst].forEach(function(c){
+    c.setAttribute('aria-hidden','true');
+    var im=c.querySelector('img'); if(im) im.alt='';
+  });
+  track.insertBefore(cLast, real[0]); track.appendChild(cFirst);
+  var slides=Array.prototype.slice.call(track.children);   /* [c5, 1..5, c1] */
+  var dotsBox=document.getElementById('caroDots');
+  var capA=document.getElementById('capA'), capB=document.getElementById('capB');
+  var capOn=capA, capShown=-1;
+  var idx=1, hold=false, lastUser=0, anim=false, settleT=null, dots=[];
+  for(var i=0;i<N;i++)(function(i){
+    var d=document.createElement('button');
+    d.type='button'; d.setAttribute('aria-label','Go to screenshot '+(i+1));
+    if(i===0) d.className='on';
+    d.addEventListener('click',function(){ lastUser=Date.now(); goTo(i+1); });
+    dotsBox.appendChild(d); dots.push(d);
+  })(i);
+  function realIdx(i){ return (i-1+N)%N; }
+  function centerOf(i){ var s=slides[i]; return s.offsetLeft+s.offsetWidth/2-track.clientWidth/2; }
+  function nearest(){
+    var c=track.scrollLeft+track.clientWidth/2, best=0, bd=1e9;
+    for(var i=0;i<slides.length;i++){
+      var d=Math.abs(slides[i].offsetLeft+slides[i].offsetWidth/2-c);
+      if(d<bd){ bd=d; best=i; }
+    }
+    return best;
+  }
+  function setCaption(r){
+    if(r===capShown) return; capShown=r;
+    var inEl=(capOn===capA)?capB:capA, outEl=capOn;
+    inEl.innerHTML=CAPS[r]; inEl.classList.add('on'); outEl.classList.remove('on');
+    capOn=inEl;
+  }
+  function paint(i){
+    idx=i; var r=realIdx(i);
+    dots.forEach(function(d,k){ d.className=k===r?'on':''; });
+    setCaption(r);
+  }
+  function jumpTo(i){
+    track.classList.add('noSnap');
+    track.scrollLeft=centerOf(i); void track.offsetWidth;
+    track.classList.remove('noSnap'); paint(i);
+  }
+  function normalize(){ if(idx===0) jumpTo(N); else if(idx===slides.length-1) jumpTo(1); }
+  function goTo(i){
+    var to=centerOf(i), from=track.scrollLeft, D=reduced?0:350, t0=null;
+    if(D===0){ jumpTo(i); normalize(); return; }
+    anim=true; track.classList.add('noSnap');
+    requestAnimationFrame(function step(ts){
+      if(t0===null) t0=ts;
+      var p=Math.min(1,(ts-t0)/D), e=1-Math.pow(1-p,3);
+      track.scrollLeft=from+(to-from)*e;
+      if(p<1) requestAnimationFrame(step);
+      else { track.classList.remove('noSnap'); anim=false; paint(i); normalize(); }
+    });
+  }
+  track.addEventListener('scroll', function(){
+    paint(nearest());
+    if(!anim){
+      lastUser=Date.now();
+      clearTimeout(settleT);
+      settleT=setTimeout(function(){ if(!anim) normalize(); },140);  /* swipe settled on a clone -> silent re-center */
+    }
+  }, {passive:true});
+  track.addEventListener('keydown', function(e){
+    if(e.key==='ArrowRight'){ e.preventDefault(); lastUser=Date.now(); goTo(idx+1); }
+    else if(e.key==='ArrowLeft'){ e.preventDefault(); lastUser=Date.now(); goTo(idx-1); }
+  });
+  ['pointerdown','touchstart'].forEach(function(ev){
+    track.addEventListener(ev,function(){ hold=true; lastUser=Date.now(); },{passive:true}); });
+  ['pointerup','pointercancel','touchend','touchcancel','mouseleave'].forEach(function(ev){
+    track.addEventListener(ev,function(){ hold=false; lastUser=Date.now(); },{passive:true}); });
+  window.addEventListener('resize', function(){ jumpTo(idx); }, {passive:true});
+  jumpTo(1);   /* slide 1 centered; clone-of-5 peeks left, slide 2 peeks right */
+  if(!reduced){
+    setInterval(function(){
+      if(hold || document.hidden || Date.now()-lastUser<5000) return;
+      goTo(idx+1);
+    },5000);
+  }
+})();
+
+/* ── HAMMER & ANVIL RAIL — hammer descends with scroll, strikes at the
+   WhatsApp CTA (~final 5%), un-strikes on scroll-back. Hidden under
+   prefers-reduced-motion and below 370px (CSS); JS also bails. ── */
+(function(){
+  var rail=document.getElementById('rail');
+  if(!rail || reduced) return;
+  var hammer=rail.querySelector('.rail-hammer');
+  var wa=document.querySelector('.wa');
+  var ticking=false;
+  function update(){
+    ticking=false;
+    var max=document.documentElement.scrollHeight-window.innerHeight;
+    if(max<=0) return;
+    var p=Math.min(1,Math.max(0,window.scrollY/max));
+    var travel=rail.clientHeight-28-24;   /* anvil zone + hammer glyph height */
+    if(travel>0) hammer.style.transform='translateY('+(p*travel).toFixed(1)+'px)';
+    var strikeP=0.95;
+    if(wa){ var waP=(wa.offsetTop-window.innerHeight*0.6)/max; if(waP>0&&waP<1) strikeP=Math.min(0.95,waP); }
+    if(p>=strikeP) rail.classList.add('struck'); else rail.classList.remove('struck');
+  }
+  window.addEventListener('scroll',function(){ if(!ticking){ ticking=true; requestAnimationFrame(update); } },{passive:true});
+  window.addEventListener('resize',update,{passive:true});
+  update();
+})();
+})();
+</script>
+</body>
+</html>
