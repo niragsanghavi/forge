@@ -121,7 +121,30 @@ service cloud.firestore {
       allow create: if isAuthed()
         && request.resource.data.size() <= 16
         && request.resource.data.workouts is list
-        && request.resource.data.workouts.size() <= 50;
+        && request.resource.data.workouts.size() <= 50
+        // Mirror pass-1 backlog clamp: a workout's calendar date (year/month/day)
+        // must be the same calendar month as the server clock AND within an
+        // ~8-day backlog window. Mirrors the client's "max(1st, today-7)…today"
+        // tappable window; the extra day of slack (8 not 7) absorbs clock skew.
+        // request.time is UTC; Forge's users are IST (UTC+5:30, always AHEAD of
+        // UTC), so an early-morning IST "today" can be one calendar day ahead of
+        // the UTC day — the "+ 1" on the upper bound admits that legitimate log.
+        // MONTH SEAM: the same 5.5h IST lead crosses a MONTH boundary on the
+        // 1st (e.g. Aug 1 00:30 IST is still Jul 31 UTC), where the month
+        // equality alone would false-reject "log today" for the first hours of
+        // every month. The OR branch admits exactly day 1 of the month that
+        // begins within the next 24h of server time — nothing else.
+        && (
+          (request.resource.data.year == request.time.year()
+            && request.resource.data.month == request.time.month()
+            && request.resource.data.day >= request.time.day() - 8
+            && request.resource.data.day <= request.time.day() + 1)
+          ||
+          (request.resource.data.day == 1
+            && (request.time + duration.value(1, 'd')).day() == 1
+            && request.resource.data.month == (request.time + duration.value(1, 'd')).month()
+            && request.resource.data.year == (request.time + duration.value(1, 'd')).year())
+        );
       allow delete: if false;
       allow update: if isAuthed()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['voided','voidedBy','voidedAt']);
@@ -295,6 +318,20 @@ service cloud.firestore {
         && (!('answers' in request.resource.data)
             || (request.resource.data.answers is map && request.resource.data.answers.size() <= 30));
       allow read:   if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // Vanity code → canonical group code pointers. Join-flow reads one doc
+    // per attempt; created at group-create (custom code) or by owner tooling.
+    // Immutable once written (update/delete: false) — a changed alias would
+    // silently re-point future joins.
+    match /codeAliases/{alias} {
+      allow read:   if isAuthed();
+      allow create: if isAuthed()
+        && alias.matches('^[A-Z0-9]{4,10}$')
+        && request.resource.data.size() == 1
+        && request.resource.data.code is string;
       allow update: if false;
       allow delete: if false;
     }
