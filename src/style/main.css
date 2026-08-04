@@ -478,17 +478,28 @@ svg.mir-ico{fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:roun
 .mir-calpanel{flex:none;width:100%;scroll-snap-align:start;scroll-snap-stop:always}
 .mir-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
 .mir-dh{font-size:11px;color:var(--muted);text-align:center;font-weight:700;padding-bottom:4px;opacity:.7}
-.mir-day{aspect-ratio:1;min-height:46px;border-radius:10px;background:rgba(255,255,255,.03);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;position:relative;cursor:pointer;transition:transform .12s}
-:root[data-theme="light"] .mir-day{background:rgba(0,0,0,.03)}
+/* Day tiles LIFT off the card instead of being outlined (31 Jul 2026 rev 2).
+   The gold border read as cheap and busy at 35 cells. This is the same idea done
+   with light: a top-lit gradient fill, a 1px inner highlight along the top edge,
+   and a soft drop shadow underneath — so each tile looks like a raised block
+   catching light rather than a boxed-in square. No border at all. */
+.mir-day{aspect-ratio:1;min-height:46px;border-radius:10px;
+  background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.028) 55%,rgba(255,255,255,.018));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07), 0 1px 2px rgba(0,0,0,.45);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;position:relative;cursor:pointer;transition:transform .12s,box-shadow .2s}
+:root[data-theme="light"] .mir-day{background:linear-gradient(180deg,#fff,rgba(0,0,0,.02));
+  box-shadow:inset 0 1px 0 #fff, 0 1px 2px rgba(0,0,0,.10)}
 .mir-day:active{transform:scale(.92)}
 .mir-day .n{font-size:11px;color:var(--muted);position:absolute;top:3px;right:5px;line-height:1}
+.mir-day.hit{background:linear-gradient(180deg,rgba(212,168,67,.10),rgba(255,255,255,.03) 60%,rgba(255,255,255,.02));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.10), 0 2px 4px rgba(0,0,0,.5)}
 .mir-day.hit svg{width:17px;height:17px;margin-top:5px}
 .mir-day.today{border:1.5px dashed rgba(212,168,67,.5)}
 .mir-day.today .plus{font-size:16px;color:var(--gold);font-weight:600;line-height:1}
 .mir-day.today .n{position:static;font-size:11px;color:var(--gold);font-weight:700}
-.mir-day.future{opacity:.32;cursor:default}
+.mir-day.future{opacity:.32;cursor:default;box-shadow:none}
 .mir-day.future .n,.mir-day.empty .n{position:static}
-.mir-day.empty{background:transparent;cursor:default}
+.mir-day.empty{background:transparent;cursor:default;box-shadow:none}
 .mir-day.capped{opacity:.7}
 .mir-day .multi{position:absolute;bottom:3px;right:4px;min-width:14px;height:14px;border-radius:7px;background:var(--gold);color:var(--ink);font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 3px}
 .mir-day.shake{animation:mirShake .3s}
@@ -623,6 +634,19 @@ svg.mir-ico{fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:roun
 .mir-rline{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted)}
 .mir-rline b{color:var(--text)}
 .mir-rline svg{width:17px;height:17px;flex:none}
+/* Cross-group afterglow: one line per OTHER group the log landed in. */
+.mir-rsub{font-size:10px;font-weight:800;letter-spacing:.18em;color:var(--muted);margin-bottom:9px}
+.mir-rgline{margin-top:8px;gap:8px;flex-wrap:wrap}
+.mir-rgline:first-of-type{margin-top:0}
+.mir-rgline .gn{font-weight:800;color:var(--text);font-size:12px;
+  min-width:104px;flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mir-rgline .up{font-weight:900;color:var(--green);font-size:12px;flex:none}
+/* The rise. Each moved group's line settles in from below, staggered, so a log
+   that shifted you in three places reads as three separate events instead of a
+   paragraph that appears all at once. */
+@keyframes mirRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+.mir-rgline.rise{animation:mirRise .42s cubic-bezier(.2,.7,.3,1) both}
+@media (prefers-reduced-motion: reduce){ .mir-rgline.rise{animation:none} }
 .mir-closebtn{margin-top:20px;width:100%;height:52px;border-radius:16px;background:linear-gradient(180deg,#e7bf58,#c69d35);border:none;color:var(--ink);font-family:var(--font);font-weight:800;font-size:15px;cursor:pointer}
 .mir-staynote{margin-top:9px;font-size:11px;color:var(--muted);opacity:.7}
 
@@ -701,3 +725,77 @@ svg.mir-ico{fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:roun
 .km-go{width:100%;margin:0}
 .km-skip{text-align:center;font-size:12.5px;color:var(--muted);padding:14px 0 4px;
   cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+
+/* ═══ MUSCLE-GROUP STEP (3 Aug 2026) ═══
+   Same visual language as the distance step so the two optional details read as
+   one idea rather than two features. */
+.mir-lift{padding:4px 0 8px}
+.lf-chips{display:flex;flex-wrap:wrap;gap:9px;margin:8px 0 16px}
+.lf-chip{padding:10px 16px;border-radius:99px;border:1px solid var(--hairline);
+  background:rgba(255,255,255,.04);color:var(--text);font-size:14px;font-weight:700;
+  cursor:pointer;transition:transform .12s,border-color .2s,background .2s}
+.lf-chip:active{transform:scale(.94)}
+.lf-chip.on{border-color:rgba(212,168,67,.6);background:var(--gold-l);color:var(--gold)}
+.mir-lift input{width:100%;margin-bottom:16px}
+.lf-go{width:100%;margin:0}
+.lf-skip{text-align:center;font-size:12.5px;color:var(--muted);padding:14px 0 2px;
+  cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.lf-never{text-align:center;font-size:11.5px;color:var(--muted);opacity:.6;
+  padding:6px 0 2px;cursor:pointer}
+/* the note itself, wherever that log is shown */
+.ddnote{display:block;font-size:11.5px;color:var(--muted);font-weight:600;margin-top:3px}
+/* Session recall. Lived inside the muscle-group step until it turned out
+   nobody wants reading material between them and the log; it now sits in the
+   Gym log card on Home, which is why the top margin flips there. */
+.lf-hist{margin:2px 0 16px;padding:12px 14px;border-radius:12px;
+  border:1px solid var(--hairline);background:rgba(255,255,255,.03)}
+.lf-nudge .lf-hist{margin:10px 0 0}
+.lf-cold{font-size:12px;color:var(--muted);line-height:1.45;margin-top:10px}
+.lf-cold b{color:var(--orange)}
+.lf-histh{font-size:10px;font-weight:800;letter-spacing:.18em;color:var(--muted);margin-bottom:8px}
+.lf-histrow{display:flex;gap:10px;align-items:baseline;margin-top:6px}
+.lf-histrow:first-of-type{margin-top:0}
+.lf-when{flex:none;font-size:11.5px;font-weight:700;color:var(--gold);min-width:74px}
+.lf-what{font-size:12.5px;color:var(--text);opacity:.85;line-height:1.4}
+
+/* ── ONE-QUESTION SURVEY ─────────────────────────────────────────────────────
+   Deliberately a scrim, not a dismissible card in the feed: it's asked once,
+   it takes one tap, and a card would be scrolled past forever. "Not now" is
+   the escape hatch and it defers rather than pretending to be an answer. */
+.sv-scrim{position:fixed;inset:0;z-index:9997;background:rgba(6,6,10,.72);
+  backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+  display:none;align-items:flex-end;justify-content:center;padding:16px}
+.sv-scrim.on{display:flex}
+@media (min-width:520px){ .sv-scrim{align-items:center} }
+.sv-box{width:100%;max-width:460px;background:var(--bg-card);
+  border:1px solid var(--border);border-radius:20px;padding:22px 20px 16px;
+  box-shadow:0 -18px 50px rgba(0,0,0,.55);
+  padding-bottom:calc(16px + env(safe-area-inset-bottom));
+  animation:svUp .34s cubic-bezier(.2,.7,.3,1) both}
+@keyframes svUp{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:translateY(0)}}
+@media (prefers-reduced-motion: reduce){ .sv-box{animation:none} }
+.sv-k{font-size:10px;font-weight:800;letter-spacing:.22em;color:var(--gold);margin-bottom:10px}
+.sv-q{font-size:17px;font-weight:800;line-height:1.32;color:var(--text)}
+.sv-sub{font-size:13px;color:var(--muted);line-height:1.5;margin:8px 0 16px}
+.sv-opt{display:block;width:100%;text-align:left;margin-bottom:9px;padding:13px 14px;
+  border-radius:13px;border:1px solid var(--border);background:var(--bg);
+  color:var(--text);font-family:inherit;cursor:pointer;
+  transition:border-color .15s,background .15s,transform .08s}
+.sv-opt:active{transform:scale(.985)}
+.sv-opt:hover{border-color:var(--gold);background:rgba(212,175,55,.06)}
+.sv-opt b{display:block;font-size:14px;font-weight:800}
+.sv-opt span{display:block;font-size:12px;color:var(--muted);margin-top:3px;line-height:1.4}
+.sv-box input{width:100%;margin-top:5px;padding:11px 13px;border-radius:12px;
+  border:1px solid var(--border);background:var(--bg);color:var(--text);
+  font-family:inherit;font-size:13px;outline:none}
+.sv-box input:focus{border-color:var(--gold)}
+.sv-later{text-align:center;font-size:12.5px;color:var(--muted);padding:14px 0 2px;
+  cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+
+/* Login-screen escape hatch. Deliberately quiet — it should be findable when
+   you're stuck and invisible when you're not, so it never reads as a step in
+   the flow. */
+.ob-fix{margin-top:18px;text-align:center}
+.ob-fix span{font-size:11.5px;color:var(--muted);cursor:pointer;
+  text-decoration:underline;text-underline-offset:3px;opacity:.75}
+.ob-fix span:hover{opacity:1;color:var(--gold)}
