@@ -1,0 +1,11 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "in.goforge.app",
+    "sha256_cert_fingerprints": [
+      "mWAS36m3uwVR",
+      "mWAS36m3uwVR"
+    ]
+  }
+}]
