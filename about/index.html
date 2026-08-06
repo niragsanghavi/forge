@@ -46,7 +46,7 @@
   --ease:cubic-bezier(.22,.61,.36,1); /* ease-out */
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html{scroll-behavior:smooth;scroll-snap-type:y proximity} /* proximity, NOT mandatory — fights iOS momentum otherwise */
+html{scroll-behavior:smooth} /* v3 reorg: page snap removed — sections flow tight, no dead voids */
 html.locked, html.locked body{overflow:hidden;height:100%}
 body{
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
@@ -191,7 +191,7 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
 
 /* ════════════════ C · MAIN PAGE ════════════════ */
 .sec{
-  max-width:720px;margin:0 auto;padding:96px 24px;
+  max-width:720px;margin:0 auto;padding:64px 24px;
   text-align:center;
 }
 .sec .display{margin-top:26px}
@@ -218,9 +218,8 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
 /* ── FULL-SCREEN SCROLL JOURNEY (What is Forge → Points → Streaks → Board) ──
    85svh sections snapping on the root proximity container; the next section's
    label peeks in the remaining ~15svh so the continuation is obvious. */
-.jsec{min-height:85vh;min-height:85svh;scroll-snap-align:start;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:24px;padding:44px 24px 30px;text-align:center}
+.jsec{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:22px;padding:58px 24px 46px;text-align:center}
 .j-img{height:55vh;height:55svh;width:100%;max-width:960px;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
 .j-img figure{position:relative;background:var(--ph-bg);border:1px solid var(--ph-line);
@@ -230,8 +229,52 @@ b.gk{font-weight:inherit;color:var(--gold-hot)}
   font-size:clamp(1.4rem,4.6vw,2.1rem);max-width:24ch}
 .j-sub{color:var(--muted);font-size:15px;max-width:42ch;line-height:1.55}
 
+/* ── FORGED GLYPH STRIP — the workout sprite rendered as gold rod in Blender.
+   All six share one 24x24 cell and one rod thickness, so they keep the same
+   relative sizes and stroke weight as the flat icons. Container carries .rv
+   for the rise; the children ripple in behind it. */
+/* sized so six cells + five gaps still hold one row at 320px, the narrowest
+   phone we care about; a 5+1 wrap reads as broken. */
+.forged{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;
+  gap:clamp(6px,2.2vw,30px);max-width:660px;margin:6px auto 0}
+.forged img{width:clamp(38px,11vw,74px);height:auto;display:block;
+  filter:drop-shadow(0 8px 16px rgba(0,0,0,.6)) drop-shadow(0 0 14px rgba(212,168,67,.10));
+  opacity:0;transform:scale(.86);
+  transition:opacity .5s var(--ease),transform .5s var(--ease)}
+.forged.in img{opacity:1;transform:none}
+.forged.in img:nth-child(1){transition-delay:.05s}
+.forged.in img:nth-child(2){transition-delay:.13s}
+.forged.in img:nth-child(3){transition-delay:.21s}
+.forged.in img:nth-child(4){transition-delay:.29s}
+.forged.in img:nth-child(5){transition-delay:.37s}
+.forged.in img:nth-child(6){transition-delay:.45s}
+.forged-cap{color:var(--muted);font-size:13.5px;letter-spacing:.01em;margin-top:14px}
+
+/* ── BACKGROUND FIELD — the same forged glyphs scattered faintly down the
+   whole page so a long dark scroll isn't empty. Purely decorative: aria-hidden,
+   pointer-events:none, and painted under everything.
+
+   Each one sits 60% on the page and 40% off it. That split is exact rather than
+   eyeballed: the overhang is derived from the element's own rendered width
+   (--w * --s), so it holds at every breakpoint instead of drifting as the
+   clamp moves. overflow:hidden on the field does the cropping, which is both
+   the look we want AND what stops the bleed becoming a horizontal scrollbar.
+
+   No drop-shadow here on purpose — at 6% opacity it is invisible, and twelve
+   large filtered images is a real cost on a mid-range Android. */
+#content{position:relative}
+#content > section, #content > footer{position:relative;z-index:1}
+.bgfield{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0;
+  --w:clamp(128px,21vw,286px)}
+.bgfield img{position:absolute;display:block;
+  width:calc(var(--w) * var(--s,1));height:auto;
+  opacity:var(--o,.06);transform:rotate(var(--rot,0deg))}
+.bgfield .l{left:calc(var(--w) * var(--s,1) * -.4)}
+.bgfield .r{right:calc(var(--w) * var(--s,1) * -.4)}
+@media (prefers-reduced-motion:reduce){ .bgfield img{transform:none} }
+
 /* events — one line, nothing more */
-.events{padding-top:110px;padding-bottom:36px}
+.events{padding-top:72px;padding-bottom:8px}
 
 /* ── HAMMER & ANVIL SCROLL RAIL — whisper-thin, right edge ── */
 .rail{position:fixed;right:10px;top:50%;transform:translateY(-50%);
@@ -251,7 +294,7 @@ html.locked .rail{display:none}
 @media(max-width:369px),(prefers-reduced-motion:reduce){.rail{display:none}}
 
 /* live counter strip */
-.stats{display:flex;justify-content:center;gap:52px;padding-top:110px;padding-bottom:0}
+.stats{display:flex;justify-content:center;gap:52px;padding-top:56px;padding-bottom:0}
 .stat{text-align:center}
 .stat-n{font-weight:900;letter-spacing:-.02em;color:var(--gold-hot);
   font-size:clamp(2.1rem,8vw,3.2rem);line-height:1.1;font-variant-numeric:tabular-nums}
@@ -259,7 +302,7 @@ html.locked .rail{display:none}
   text-transform:uppercase;color:var(--muted)}
 
 /* group-chat carousel — native scroll-snap, one centered slide, neighbors peek */
-.chats{padding-top:56px}
+.chats{padding-top:48px}
 .caro{margin:36px -24px 0}
 .caro-track{position:relative;/* offsetParent for slides — keeps offsetLeft
   track-internal at every width; without this, slides measure against BODY and
@@ -282,7 +325,7 @@ html.locked .rail{display:none}
 .caro-dots button:focus-visible,.caro-track:focus-visible{outline:2px solid var(--gold-hot);outline-offset:3px}
 
 /* CTA */
-.cta{padding-top:110px;padding-bottom:110px}
+.cta{padding-top:72px;padding-bottom:56px}
 .cta .btn{margin-top:38px}
 /* secondary CTA — outlined pill: one clear step below the gold primary,
    one step above muted text */
@@ -299,13 +342,15 @@ html.locked .rail{display:none}
 .btn-ig:focus-visible{outline:2px solid var(--gold-hot);outline-offset:3px}
 
 /* ════════════════ D · WHATSAPP CTA ════════════════ */
-.wa{max-width:720px;margin:0 auto;padding:0 24px 96px;text-align:center}
-.wa-sub{color:var(--muted);font-size:15px}
-.wa a{display:inline-block;margin-top:26px;transition:opacity .3s var(--ease)}
-.wa a:hover{opacity:.88}
-.wa img{height:56px;width:auto;display:inline-block}
-.wa-fallback{display:inline-block}
-.wa-fallback svg{display:block;height:56px;width:auto}
+
+/* ── the showroom — live sandbox card ── */
+.showroom{max-width:720px;margin:0 auto;padding:64px 24px;text-align:center}
+.showroom .show-card{margin-top:26px;border:1px solid var(--gold-line);border-radius:16px;padding:28px 22px;background:rgba(212,168,67,.05)}
+.showroom .show-kv{display:flex;justify-content:center;gap:34px;margin:18px 0 6px;flex-wrap:wrap}
+.showroom .show-kv .k{font-size:10.5px;letter-spacing:.2em;color:var(--muted)}
+.showroom .show-kv .v{font-size:26px;font-weight:900;color:var(--gold-hot);letter-spacing:.08em;font-variant-numeric:tabular-nums}
+.showroom .show-note{font-size:12px;color:var(--muted);margin-top:14px;line-height:1.65}
+.showroom .btn{margin-top:20px}
 
 /* ════════════════ E · FOOTER STRIP ════════════════ */
 .foot{border-top:1px solid var(--line);padding:56px 24px 64px;text-align:center}
@@ -347,8 +392,7 @@ html.locked .rail{display:none}
   .caro-caps{max-width:340px;min-height:70px}
   .cta{padding-top:150px;padding-bottom:150px}
   .events{padding-top:130px;padding-bottom:40px}
-  .wa{padding-bottom:130px}
-}
+  }
 
 /* ── reduced motion: no nudge, near-instant fades, no translates ─── */
 @media(prefers-reduced-motion:reduce){
@@ -356,6 +400,119 @@ html.locked .rail{display:none}
   .n-r,.n-u,.n-l,.n-d,.cue svg{animation:none}
   .card,.i-line,.i-btn,.rb,.rv,.dots,.congrats,.cue{transition-duration:.01ms;transform:none}
   .card{transform:none}
+}
+/* ══════════════════════════════════════════════════════════════════
+   v4 — DISPLAY FACE + PHYSICAL MARK (6 Aug 2026)
+   ══════════════════════════════════════════════════════════════════ */
+
+/* The page ran entirely on the system stack. That was the loudest
+   "unfinished" signal it had — louder than the absence of imagery,
+   and cheaper to fix than anything else on the page. Archivo at 800
+   is a grotesque with enough width and flat enough sidewalls to read
+   industrial rather than corporate, which is the register a page
+   about a forge wants.
+   Latin subset, ONE weight, 34 KB. Body copy deliberately stays on
+   the system stack: it costs nothing and paints instantly. */
+/* The range on font-weight is the important part. Every display rule on
+   this page asks for 900, and only an 800 file ships — declared as a
+   single weight, the browser would synthesise the difference and smear
+   the stems. Declaring 700–900 tells it this one file serves that whole
+   band, so 900 resolves to real outlines instead of faux-bold. It also
+   means no rule below has to restate a weight, and none of the existing
+   900s need editing. */
+@font-face{
+  font-family:'Archivo';
+  src:url('assets/font/archivo-800.woff2') format('woff2');
+  font-weight:700 900;font-style:normal;font-display:swap;
+}
+/* Every display-scale selector on the page. Family only — the existing
+   weight and size rules are left exactly as they were. */
+.display,.g-title,#i1,.rb-xl,.rb-lg,.j-title,.lead,.congrats,
+.stat-n,.wordmark,.showroom .show-kv .v,h2{
+  font-family:'Archivo',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,sans-serif;
+  letter-spacing:-.03em;
+}
+/* the wordmark is tracked WIDE on purpose — don't let the tightening above
+   collapse it */
+.wordmark{letter-spacing:.3em}
+.stat-n,.showroom .show-kv .v{letter-spacing:.02em}
+
+/* THE MARK. Sized against the viewport so it never crowds the copy on
+   a small phone — it introduces the page, it isn't the subject of it. */
+.hero-mark{
+  width:min(44vw,176px);margin:0 auto 2px;line-height:0;
+  opacity:0;transform:translateY(12px) scale(.94);
+  transition:opacity .7s var(--ease),transform .7s var(--ease);
+}
+.hero-mark.in{opacity:1;transform:none}
+.hero-mark img{
+  width:100%;height:auto;
+  /* Two shadows doing different jobs: one seats the object on the page,
+     one is the heat the ember line would actually throw. */
+  filter:drop-shadow(0 16px 30px rgba(0,0,0,.75))
+         drop-shadow(0 0 24px rgba(212,168,67,.11));
+}
+/* An animation that loops forever is a battery cost and an attention
+   cost. Anyone who has asked their OS to stop moving things gets the
+   still frame instead — same image, no motion. */
+@media (prefers-reduced-motion:reduce){
+  .hero-mark img{content:url('assets/forge-hero-still.webp')}
+}
+
+/* ── EDGE INDICATORS ───────────────────────────────────────────────
+   The chevron points, but it points from the centre of the screen, so
+   the reader has to translate "arrow shape" into "turn my head that
+   way". Lighting the actual edge of the device removes the translation:
+   the side you should look at is the side that is glowing.
+   Fixed to the viewport, not the card, because the edge of the PHONE is
+   the thing being indicated. Pointer-events off throughout — this sits
+   over the buttons. */
+.edge{
+  position:fixed;pointer-events:none;z-index:4;
+  opacity:0;transition:opacity .45s var(--ease);
+}
+.edge.on{opacity:1}
+
+/* The wash: a soft gradient bleeding inward from the edge. Tuned low —
+   at full gold it fought the copy for attention, which is backwards,
+   since the copy is the instruction. */
+.edge-r,.edge-l{top:0;bottom:0;width:min(38vw,190px)}
+.edge-u,.edge-d{left:0;right:0;height:min(30vh,180px)}
+.edge-r{right:0;background:linear-gradient(to left,  rgba(212,168,67,.22),transparent 72%)}
+.edge-l{left:0; background:linear-gradient(to right, rgba(212,168,67,.22),transparent 72%)}
+.edge-u{top:0;  background:linear-gradient(to bottom,rgba(212,168,67,.22),transparent 72%)}
+.edge-d{bottom:0;background:linear-gradient(to top,  rgba(212,168,67,.22),transparent 72%)}
+
+/* The hairline: a hot line sitting exactly on the edge, with a bloom.
+   This is what actually reads as "here" — the wash only gives it depth. */
+.edge::after{
+  content:"";position:absolute;background:var(--gold-hot);
+  box-shadow:0 0 22px 3px rgba(212,168,67,.55);
+}
+.edge-r::after,.edge-l::after{top:12%;bottom:12%;width:2.5px;border-radius:2px}
+.edge-u::after,.edge-d::after{left:12%;right:12%;height:2.5px;border-radius:2px}
+.edge-r::after{right:0} .edge-l::after{left:0}
+.edge-u::after{top:0}   .edge-d::after{bottom:0}
+
+/* Breathing on the same 1.5s cycle as the chevron nudge, so the two read
+   as one signal rather than two things happening at once. */
+.edge.on::after{animation:edgePulse 1.5s var(--ease) infinite}
+@keyframes edgePulse{
+  0%,100%{opacity:.55;transform:scale(1)}
+  50%    {opacity:1;  transform:scale(1.015)}
+}
+@media (prefers-reduced-motion:reduce){
+  .edge.on::after{animation:none;opacity:.9}
+}
+
+/* MATERIAL. The image frames were flat fills on a flat page. A hairline
+   of light along the top edge and a shadow beneath is enough to make
+   them sit ON the page rather than in it — the same trick the render
+   uses, done in CSS for free. */
+.ph{
+  background-image:radial-gradient(120% 78% at 50% 0%,rgba(255,255,255,.05),transparent 62%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.055),
+             0 20px 44px -26px rgba(0,0,0,.92);
 }
 </style>
 <!-- Google tag (gtag.js) -->
@@ -380,10 +537,31 @@ html.locked .rail{display:none}
 
 <!-- ════════════════ A · THE GATE ════════════════ -->
 <section class="gate" id="gate" aria-label="Introduction">
+
+  <!-- EDGE INDICATORS. The chevron alone points, but it points from the middle
+       of the screen — you read it, then work out which way to turn your head.
+       Lighting the actual edge of the phone removes that translation step: the
+       side you're meant to look at is the side that's glowing. Decorative only;
+       the card's own words remain the accessible instruction. -->
+  <div class="edge edge-r" id="edgeR" aria-hidden="true"></div>
+  <div class="edge edge-u" id="edgeU" aria-hidden="true"></div>
+  <div class="edge edge-l" id="edgeL" aria-hidden="true"></div>
+  <div class="edge edge-d" id="edgeD" aria-hidden="true"></div>
+
   <div class="stage">
 
     <!-- intro screen — two sequential fade-ins, then BEGIN -->
     <div class="card on" data-i="0">
+      <!-- The mark, rendered rather than drawn: the hammer-and-anvil lockup from
+           brand/forge-mark.svg extruded, lit and swayed in Blender. Ships as a
+           20-frame animated WebP (113 KB), not a WebGL scene — three.js would
+           have cost ~600 KB before the model, on a page whose readers are on
+           Indian mobile. A sway, not a turntable: this mark is 0.6 units deep
+           against 5.5 wide, so a full rotation would make it vanish edge-on for
+           a third of every loop. -->
+      <figure class="hero-mark" id="heroMark" aria-hidden="true">
+        <img src="assets/forge-hero.webp" width="294" height="251" alt="">
+      </figure>
       <p class="i-line" id="i1">Welcome to <b class="gk">Forge</b>.</p>
       <p class="i-line" id="i2">We&rsquo;ve built <b class="gk">image recognition</b> that can tell what you&rsquo;re looking at. Don&rsquo;t believe us? One round of our memory game &mdash; prove us wrong.</p>
       <button class="btn i-btn" id="beginBtn" data-next>Begin</button>
@@ -446,6 +624,24 @@ html.locked .rail{display:none}
 <!-- ════════════════ C · MAIN PAGE ════════════════ -->
 <main id="content">
 
+  <!-- Faint forged glyphs down the whole scroll. Alternating sides, each
+       cropped by the page edge. Decorative only — never announced, never
+       clickable, always behind the content. -->
+  <div class="bgfield" aria-hidden="true">
+    <img class="r" style="top:2.5%;--s:1.15;--rot:-9deg;--o:.065"  src="assets/glyph3d/bg/g-run.webp"    loading="lazy" alt="">
+    <img class="l" style="top:9%;--s:.85;--rot:7deg;--o:.05"       src="assets/glyph3d/bg/g-gym.webp"    loading="lazy" alt="">
+    <img class="r" style="top:16.5%;--s:.95;--rot:12deg;--o:.055"  src="assets/glyph3d/bg/g-swim.webp"   loading="lazy" alt="">
+    <img class="l" style="top:24%;--s:1.2;--rot:-6deg;--o:.06"     src="assets/glyph3d/bg/g-cycle.webp"  loading="lazy" alt="">
+    <img class="r" style="top:32%;--s:.9;--rot:-14deg;--o:.05"     src="assets/glyph3d/bg/g-racket.webp" loading="lazy" alt="">
+    <img class="l" style="top:40%;--s:1.05;--rot:9deg;--o:.058"    src="assets/glyph3d/bg/g-mind.webp"   loading="lazy" alt="">
+    <img class="r" style="top:48%;--s:1.1;--rot:5deg;--o:.055"     src="assets/glyph3d/bg/g-walk.webp"   loading="lazy" alt="">
+    <img class="l" style="top:56%;--s:.9;--rot:-11deg;--o:.06"     src="assets/glyph3d/bg/g-cardio.webp" loading="lazy" alt="">
+    <img class="r" style="top:64.5%;--s:1;--rot:8deg;--o:.05"      src="assets/glyph3d/bg/g-combat.webp" loading="lazy" alt="">
+    <img class="l" style="top:73%;--s:1.15;--rot:-5deg;--o:.055"   src="assets/glyph3d/bg/g-ball.webp"   loading="lazy" alt="">
+    <img class="r" style="top:81.5%;--s:.95;--rot:13deg;--o:.058"  src="assets/glyph3d/bg/g-dance.webp"  loading="lazy" alt="">
+    <img class="l" style="top:90%;--s:1.1;--rot:-8deg;--o:.07"     src="assets/glyph3d/bg/g-flame.webp"  loading="lazy" alt="">
+  </div>
+
   <!-- ════════ SCROLL JOURNEY · 1/4 — WHAT IS FORGE ════════ -->
   <section class="jsec">
     <div class="label">What is Forge</div>
@@ -459,11 +655,20 @@ html.locked .rail{display:none}
     </div>
     <h2 class="j-title">Forge turns your friend group&rsquo;s workouts into a monthly <b class="gk">competition</b>.</h2>
     <p class="j-sub">Real people. Real <b class="gk">rivalry</b>. Every workout counts.</p>
+    <div class="forged rv" aria-hidden="true">
+      <img src="assets/glyph3d/g-gym.webp"    width="176" height="176" loading="lazy" alt="">
+      <img src="assets/glyph3d/g-run.webp"    width="176" height="176" loading="lazy" alt="">
+      <img src="assets/glyph3d/g-swim.webp"   width="176" height="176" loading="lazy" alt="">
+      <img src="assets/glyph3d/g-cycle.webp"  width="176" height="176" loading="lazy" alt="">
+      <img src="assets/glyph3d/g-racket.webp" width="176" height="176" loading="lazy" alt="">
+      <img src="assets/glyph3d/g-mind.webp"   width="176" height="176" loading="lazy" alt="">
+    </div>
+    <p class="forged-cap rv">Lift, run, swim, ride, play, sit very still. It all counts.</p>
   </section>
 
   <!-- ════════ 2/4 — POINTS ════════ -->
   <section class="jsec">
-    <div class="label">How it works &middot; Points</div>
+    <div class="label">How it works &middot; <b class="gk">Points</b></div>
     <div class="j-img">
       <figure>
         <img src="assets/marketing/feature-points.webp" loading="lazy" alt="Forge points board" onerror="this.style.display='none'">
@@ -475,7 +680,7 @@ html.locked .rail{display:none}
 
   <!-- ════════ 3/4 — STREAKS ════════ -->
   <section class="jsec">
-    <div class="label">How it works &middot; Streaks</div>
+    <div class="label">How it works &middot; <b class="gk">Streaks</b></div>
     <div class="j-img">
       <figure>
         <img src="assets/marketing/feature-streaks.webp" loading="lazy" alt="Forge streak card" onerror="this.style.display='none'">
@@ -486,7 +691,7 @@ html.locked .rail{display:none}
 
   <!-- ════════ 4/4 — LEADERBOARD ════════ -->
   <section class="jsec">
-    <div class="label">How it works &middot; Leaderboard</div>
+    <div class="label">How it works &middot; <b class="gk">Leaderboard</b></div>
     <div class="j-img">
       <figure>
         <img src="assets/marketing/feature-leaderboard.webp" loading="lazy" alt="Forge leaderboard" onerror="this.style.display='none'">
@@ -527,10 +732,24 @@ html.locked .rail{display:none}
     </div>
   </section>
 
+  <section class="showroom rv" aria-label="Try a live demo league">
+    <div class="label">The showroom</div>
+    <h2 class="display" style="margin-top:22px">Don&rsquo;t take our word for it. <b class="gk">Walk in.</b></h2>
+    <div class="show-card">
+      <p style="font-size:15px;color:var(--text)">A fully live demo league &mdash; nine fictional athletes, one very real leaderboard. Go in, pick anyone, log a workout, break nothing.</p>
+      <div class="show-kv">
+        <div><div class="k">GROUP CODE</div><div class="v">FORGE1</div></div>
+        <div><div class="k">PIN &mdash; EVERYONE&rsquo;S</div><div class="v">0000</div></div>
+      </div>
+      <a class="btn" href="https://goforge.in/" target="_blank" rel="noopener">Enter the showroom</a>
+      <p class="show-note">It&rsquo;s a sandbox: nothing you do here counts anywhere, and the <b class="gk">fictional nine</b> have no feelings to hurt. Probably.</p>
+    </div>
+  </section>
+
   <section class="sec cta">
     <h2 class="display rv">Bring your <b class="gk">group</b>.</h2>
     <div class="rv">
-      <a class="btn" href="mailto:team@goforge.in?subject=Starting%20a%20Forge%20group&body=Hi%20-%20I%20want%20to%20start%20a%20Forge%20group%20for%20my%20crew.">Start your group</a>
+      <a class="btn" href="https://wa.me/919870000217?text=Hi!%20I%20want%20to%20start%20a%20Forge%20group%20for%20my%20crew.">Start your group</a>
     </div>
     <div class="rv">
       <a class="btn-ig" href="https://www.instagram.com/go.forge/" target="_blank" rel="noopener">
@@ -541,23 +760,6 @@ html.locked .rail{display:none}
   </section>
 
   <!-- ════════════════ D · WHATSAPP CTA ════════════════ -->
-  <section class="wa rv">
-    <p class="wa-sub">For more information, <b class="gk">drop a text</b> &mdash; happy to explain further.</p>
-    <a aria-label="Chat on WhatsApp" href="https://wa.me/919870000217?text=Hi!%20I%20found%20Forge%20at%20goforge.in%20and%20want%20to%20know%20more."><span class="wa-fallback" id="waFallback"><!--
-      Faithful recreation of WhatsApp's official "Chat on WhatsApp" green
-      button (asset not fetchable at build time). Drop the official
-      WhatsAppButtonGreenLarge.png into assets/marketing/ and this SVG
-      auto-retires. #25D366 is the sanctioned exemption to the one-accent
-      rule; used nowhere else.
-      --><svg viewBox="0 0 292 60" role="img" aria-hidden="true" focusable="false">
-        <rect x="0" y="0" width="292" height="60" rx="30" fill="#25D366"/>
-        <g transform="translate(20,14) scale(0.0625)" fill="#fff">
-          <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/>
-        </g>
-        <text x="62" y="38" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="19" font-weight="600" fill="#fff">Chat on WhatsApp</text>
-      </svg></span></a>
-  </section>
-
   <!-- ════════════════ E · FOOTER STRIP ════════════════ -->
   <footer class="foot">
     <div class="pills rv">
@@ -625,14 +827,30 @@ docEl.classList.add('locked');
 content.setAttribute('inert','');
 
 /* intro screen — line 1, line 2 (~1s later), then BEGIN */
-setTimeout(function(){ document.getElementById('i1').classList.add('in'); }, 300);
-setTimeout(function(){ document.getElementById('i2').classList.add('in'); }, 1400);
-setTimeout(function(){ document.getElementById('beginBtn').classList.add('in'); }, 2500);
+/* The mark lands first and alone. Giving it a beat to itself before any
+   words appear is what makes it read as a brand arriving rather than an
+   image loading next to a sentence. */
+setTimeout(function(){ var m=document.getElementById('heroMark'); if(m) m.classList.add('in'); }, 120);
+setTimeout(function(){ document.getElementById('i1').classList.add('in'); }, 760);
+setTimeout(function(){ document.getElementById('i2').classList.add('in'); }, 1860);
+setTimeout(function(){ document.getElementById('beginBtn').classList.add('in'); }, 2960);
+
+/* Cards 1-4 each ask the reader to look a particular way; light that edge of
+   the device while the card is up. Index 0 is the intro and 5+ is the payoff,
+   so both clear every edge. */
+var edgeIds = { 1:'edgeR', 2:'edgeU', 3:'edgeL', 4:'edgeD' };
+function setEdge(n){
+  Object.keys(edgeIds).forEach(function(k){
+    var el = document.getElementById(edgeIds[k]);
+    if(el) el.classList.toggle('on', Number(k) === n);
+  });
+}
 
 function show(n){
   cards[idx].classList.remove('on');
   idx = n;
   cards[idx].classList.add('on');
+  setEdge(n);
   if(n >= 1 && n <= 4){
     dots.classList.add('show');
     dotEls.forEach(function(d,i){ d.classList.toggle('hit', i <= n-1); });
@@ -669,6 +887,10 @@ cards.forEach(function(card, n){
 
 var cue = document.getElementById('cue');
 function releasePage(){
+  /* The edges are position:fixed, so an edge left lit here would follow the
+     reader down the whole page. The skip button reaches this without ever
+     passing through show(), so clear them at the single exit instead. */
+  setEdge(0);
   var sk=document.getElementById('gateSkip'); if(sk) sk.classList.remove('show');
   docEl.classList.remove('locked');
   content.removeAttribute('inert');
@@ -897,7 +1119,7 @@ document.querySelectorAll('.rv').forEach(function(el){ io.observe(el); });
   var targets=[
     ['journey_view',     document.querySelector('.jsec')],
     ['carousel_view',    document.querySelector('.caro')],
-    ['page_end_reached', document.querySelector('.wa')]
+    ['page_end_reached', document.querySelector('.foot')]
   ];
   var vio=new IntersectionObserver(function(es){
     es.forEach(function(e){
@@ -913,18 +1135,18 @@ document.querySelectorAll('.rv').forEach(function(el){ io.observe(el); });
   document.querySelectorAll('a[href*="instagram.com"]').forEach(function(a){
     a.addEventListener('click', function(){ track('instagram_click'); });
   });
-  var waA=document.querySelector('.wa a');
+  var waA=document.querySelector('.cta a[href*="wa.me"]');
   if(waA) waA.addEventListener('click', function(){ track('whatsapp_click'); });
 })();
 
 /* ── HAMMER & ANVIL RAIL — hammer descends with scroll, strikes at the
-   WhatsApp CTA (~final 5%), un-strikes on scroll-back. Hidden under
+   Start-your-group CTA (~final 5%), un-strikes on scroll-back. Hidden under
    prefers-reduced-motion and below 370px (CSS); JS also bails. ── */
 (function(){
   var rail=document.getElementById('rail');
   if(!rail || reduced) return;
   var hammer=rail.querySelector('.rail-hammer');
-  var wa=document.querySelector('.wa');
+  var wa=document.querySelector('.cta');
   var ticking=false;
   function update(){
     ticking=false;
