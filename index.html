@@ -288,6 +288,19 @@
       </div>
     </div>
 
+    <!-- MONDAY RECAP — the week that just ended. Renders nothing except on a
+         Monday or Tuesday, and only once per week per group (dismissal is
+         stored per group + per week-start so it can never resurface). -->
+    <div id="mondayRecap"></div>
+
+    <!-- PERSONAL MONTHLY GOAL. renderGoalRing() / openGoalInput() / _loadMyGoals()
+         have been complete and callable for weeks with no div to paint into, so
+         the whole feature was dead on arrival — every render was a silent
+         `if(!el) return`. Restored rather than deleted: it is the "personal
+         monthly goal" the solo/small-group plan calls for, and it already
+         persists to users/{id}.monthlyGoals with a localStorage migration. -->
+    <div id="goalRingCard"></div>
+
     <div class="card mir-calcard">
       <div class="mir-calnav">
         <div class="left"><div class="m"><span id="mirCalMonth"></span><span class="ro" id="mirCalRO"></span></div><div class="c" id="mirCalCount"></div></div>
@@ -357,10 +370,24 @@
     <div id="weeklyMover"></div>
     <!-- Team distance goal. Renders nothing at all unless season.kmTarget is set. -->
     <div id="kmGoalCard"></div>
-    <div class="shdr">Team Standings</div>
-    <div id="teamStand"></div>
+    <div class="shdr" id="teamStandHdr">Team Standings</div>
+    <!-- Solo groups hide this whole section, but the header above already
+         shows during boot for them too, so the placeholder doesn't introduce a
+         flash that wasn't there — renderLB() clears both on its first pass. -->
+    <div id="teamStand">
+      <div class="sk-bar"><div class="sk sk-bt"></div><div class="sk sk-bf" style="width:100%"></div><div class="sk sk-bm"></div></div>
+      <div class="sk-bar"><div class="sk sk-bt"></div><div class="sk sk-bf" style="width:68%"></div><div class="sk sk-bm"></div></div>
+    </div>
     <div class="shdr">Individual Rankings</div>
-    <div class="card" id="indLb"></div>
+    <!-- Seeded in the MARKUP, not from JS: this is the boot window, before the
+         first Firestore snapshot, and anything script-driven would still leave
+         one empty frame. renderLB() overwrites the lot on its first pass. -->
+    <div class="card" id="indLb">
+      <div class="sk-row"><div class="sk sk-av"></div><div class="sk-body"><div class="sk sk-l1" style="width:46%"></div><div class="sk sk-l2"></div></div><div class="sk sk-num"></div></div>
+      <div class="sk-row"><div class="sk sk-av"></div><div class="sk-body"><div class="sk sk-l1" style="width:62%"></div><div class="sk sk-l2"></div></div><div class="sk sk-num"></div></div>
+      <div class="sk-row"><div class="sk sk-av"></div><div class="sk-body"><div class="sk sk-l1" style="width:38%"></div><div class="sk sk-l2"></div></div><div class="sk sk-num"></div></div>
+      <div class="sk-row"><div class="sk sk-av"></div><div class="sk-body"><div class="sk sk-l1" style="width:54%"></div><div class="sk sk-l2"></div></div><div class="sk sk-num"></div></div>
+    </div>
     <div class="shdr">Your Breakdown</div>
     <div class="card" id="ptsBk"></div>
   </div>
@@ -368,7 +395,11 @@
   <!-- FEED -->
   <div class="page" id="page-feed">
     <div class="page-title">Activity Feed</div>
-    <div class="card" id="feedList"></div>
+    <div class="card" id="feedList">
+      <div class="sk-row"><div class="sk sk-av"></div><div class="sk-body"><div class="sk sk-l1" style="width:44%"></div><div class="sk sk-l2"></div></div><div class="sk sk-num"></div></div>
+      <div class="sk-row"><div class="sk sk-av"></div><div class="sk-body"><div class="sk sk-l1" style="width:58%"></div><div class="sk sk-l2"></div></div><div class="sk sk-num"></div></div>
+      <div class="sk-row"><div class="sk sk-av"></div><div class="sk-body"><div class="sk sk-l1" style="width:40%"></div><div class="sk sk-l2"></div></div><div class="sk sk-num"></div></div>
+    </div>
   </div>
 
   <!-- GLOBAL -->
@@ -421,7 +452,7 @@
       <div class="tmuted" style="margin-bottom:12px">Update at the start of each month</div>
       <div id="adminRoles"></div>
       <button class="btn btn-gold" style="margin-top:12px" onclick="saveRoles()">Save All Changes</button>
-      <button class="btn btn-surface" style="margin-top:8px" onclick="openRebalancePreview()">⚖️ Auto-balance teams</button>
+      <button class="btn btn-surface" id="rebalanceBtn" style="margin-top:8px" onclick="openRebalancePreview()">⚖️ Auto-balance teams</button>
     </div>
     <div class="card">
       <div class="card-title">Monthly Twists</div>
@@ -474,6 +505,23 @@
       <button class="btn btn-gold" id="linkBtn" style="margin:0" onclick="linkAnotherGroup()">Link Group</button>
       <div id="linkResult" style="margin-top:10px;font-size:13px"></div>
     </div>
+
+    <!-- PUSH NOTIFICATIONS. Renders nothing unless FEATURE_PUSH is on. -->
+    <div id="pushShdr" class="shdr" style="display:none">Notifications</div>
+    <div class="card" id="pushCard" style="display:none"></div>
+
+    <!-- GOOGLE SIGN-IN — Auth Phase 1. Renders NOTHING unless
+         FEATURE_GOOGLE_AUTH is on, so this is inert until the console work is
+         done. Sits above Account so the last thing on the page stays deletion. -->
+    <div id="googleAuthShdr" class="shdr" style="display:none">Account security</div>
+    <div class="card" id="googleAuthCard" style="display:none"></div>
+
+    <!-- ACCOUNT DELETION — a Google Play requirement for a production listing:
+         an in-app path, not only the web page. Deliberately last on the page and
+         behind a typed confirmation, because it is the only irreversible thing a
+         normal user can do to themselves. Populated by renderDeleteAccountCard(). -->
+    <div class="shdr">Account</div>
+    <div class="card" id="deleteAccountCard"><div class="tmuted">Loading…</div></div>
   </div>
 
   <!-- IRON PLEDGE -->
@@ -554,8 +602,8 @@
         <label>Minimum workouts before penalty</label>
         <input id="editMinWO" type="number">
         <label>Number of teams (2 or 3)</label>
-        <input id="editNumTeams" type="number" min="2" max="3">
-        <label>Team streak threshold (% of team needed for bonus)</label>
+        <input id="editNumTeams" type="number" min="1" max="3">
+        <label>Streak threshold (% of the team — or of the whole group at 1 team)</label>
         <input id="editThreshold" type="number" min="30" max="100">
         <label>Team distance target (km) — blank or 0 turns the whole feature off</label>
         <input id="editKmTarget" type="number" min="0" max="10000" placeholder="off">
@@ -635,8 +683,8 @@
             <label>Minimum workouts before penalty</label>
             <input id="newGroupMinWO" type="number" value="12">
             <label>Number of teams (2 or 3)</label>
-            <input id="newGroupNumTeams" type="number" min="2" max="3" value="3">
-            <label>Team streak threshold (% of team needed for bonus)</label>
+            <input id="newGroupNumTeams" type="number" min="1" max="3" value="3">
+            <label>Streak threshold (% of the team — or of the whole group at 1 team)</label>
             <input id="newGroupThreshold" type="number" min="30" max="100" value="60">
             <label style="display:flex;align-items:center;gap:8px;margin-top:4px">
               <input type="checkbox" id="newGroupRoles" checked style="width:auto;margin:0">
@@ -681,6 +729,52 @@
 <script src="src/services/scoringEngine.js"></script>
 
 <script>
+// ── VERSION-SKEW GUARD ────────────────────────────────────────────────────
+// index.html carries its JS inline; appState.js is a separate cached file. A
+// browser can therefore hold a FRESH index.html and a STALE appState.js — which
+// is exactly what happens in the window around a deploy, and what happened on
+// this machine during QA on 7 Aug. When it does, the first call to a helper
+// that only exists in the new appState.js throws inside loadGroup(), boot never
+// completes, and the app is BRICKED on a blank shell. No error the user can act
+// on, no recovery but clearing storage.
+//
+// The service worker is network-first so this should be rare, but "rare" on a
+// login path is still someone's morning. These fallbacks are byte-identical in
+// behaviour to the appState.js originals and are only installed if missing, so
+// the moment the fresh file lands they are simply never consulted.
+if(typeof window.teamLettersOf !== 'function'){
+  window.teamLettersOf = function(season){
+    const n = Number(season && season.numTeams);
+    if(n === 1) return ['A'];
+    if(n === 2) return ['A','B'];
+    return ['A','B','C'];
+  };
+}
+if(typeof window.isSoloMode !== 'function'){
+  window.isSoloMode = function(){
+    return Number(window.season && window.season.numTeams) === 1;
+  };
+}
+// Not a boot path — this one runs inside the account-deletion transaction. A
+// stale appState.js wouldn't brick the app, it would fail the DELETION, and
+// that is the Play Store hard gate: the one operation that must not throw
+// because a cached file is a few minutes old. Same bank, same order, so a
+// device running the fallback picks the identical name the fresh file would.
+if(typeof window.pickDepartedName !== 'function'){
+  window.pickDepartedName = function(roster){
+    const BANK = window.DEPARTED_NAMES || [
+      'Sheera Naway', 'Simran Bhaag', 'Ranaway Rana', 'Gayab Singh',
+      'Nikhil Gayaa', 'Farrar Khan',  'Rafu Chakkar', 'Bhaagi Mehta',
+      'Gul Hogayaa',  'U-Turn Uday',  'Tata B. Bai',  'Chhod K. Gaya'
+    ];
+    const taken = new Set((roster||[]).map(p => p && p.name).filter(Boolean));
+    for(const n of BANK){ if(!taken.has(n)) return n; }
+    let i = 1;
+    while(taken.has('Gone Player #' + i)) i++;
+    return 'Gone Player #' + i;
+  };
+}
+
 // ── CONTENT ───────────────────────────────────────────────────────────────
 const DAILY_FACTS = [
   "Your heart pumps 5 litres of blood per minute at rest. During exercise, that jumps to 20.",
@@ -1319,6 +1413,10 @@ async function submitPinEntry(){
           knownDeviceUids: firebase.firestore.FieldValue.arrayUnion(window.currentUid||null)
         }, {merge:true});
       }
+      // If a previous deletion attempt died mid-sweep, finish it now rather than
+      // letting the account sit half-removed. Piggybacks on this already
+      // fire-and-forget block precisely so it can never fail a login.
+      if(p.userId) await resumeAccountDeletionIfPending(p.userId);
     } catch(e){ logErr('submitPinEntry: identity write failed', e); }
   })();
 
@@ -1374,8 +1472,7 @@ async function registerAndJoin(){
   // Name must be unique within this group's roster (case-insensitive)
   const existing = (season.roster||[]).find(p=>p.name.toLowerCase()===formattedName.toLowerCase());
   if(existing){ toast(`The name "${formattedName}" is already taken in this group. Please use a different name (e.g. add your surname or initial).`,'error'); return; }
-  const numTeams = season.numTeams === 2 ? 2 : 3;
-  const teams = numTeams === 2 ? ['A','B'] : ['A','B','C'];
+  const teams = teamLettersOf(season);
   const assignedTeam = teams[(season.roster||[]).length % teams.length];
 
   // Stage the new player and route to PIN-setting. Nothing is written until the
@@ -1560,11 +1657,29 @@ async function loadGroup(code, fromCache){
 
     // Refresh `me` against the freshly loaded roster (team/role/consent may have changed)
     if(me){
-      const fresh = (season.roster||[]).find(p=>p.name===me.name);
+      let fresh = (season.roster||[]).find(p=>p.name===me.name);
+      // SELF-HEAL AFTER A RENAME. The device caches the whole roster row, name
+      // included, so once an admin renames someone the name lookup misses, the
+      // `if(fresh)` guard silently keeps the STALE row, and upsertSession below
+      // re-persists the old name. Every log that device then writes lands under
+      // a name the roster no longer knows — scoring zero, invisibly. That is the
+      // Riya failure mode arriving by a second route.
+      // userId survives a rename, so fall back to it. Fallback ONLY: a lot of
+      // legacy roster rows still carry no userId at all.
+      if(!fresh && me.userId) fresh = (season.roster||[]).find(p=>p && p.userId===me.userId);
       if(fresh) me = fresh;
     }
     // Keep this group's session entry fresh (group name + latest player record).
     upsertSession(code, me, groupData.name);
+
+    // Finish a half-completed account deletion on session restore too (the PIN
+    // login path has its own hook). Fire-and-forget — never blocks boot.
+    if(me && me.userId){ try{ resumeAccountDeletionIfPending(me.userId); }catch(e){} }
+    // Same treatment for a returning Google redirect. Inert while the flag is off.
+    try{ finishGoogleLinkIfReturning(); }catch(e){}
+    // And refresh the push token if permission was already granted. Silent:
+    // never prompts, never blocks boot. Inert while FEATURE_PUSH is off.
+    try{ refreshPushTokenQuietly(); }catch(e){}
 
     // S2 auto-rollover: opportunistic, never awaited — this client keeps
     // booting normally on the (possibly about-to-be-archived) season; if a
@@ -1795,7 +1910,11 @@ function subscribe(){
     if(!s.exists) return; // archived/rollover case is handled by the group listener above
     season = s.data();
     if(me){
-      const fresh = (season.roster||[]).find(p=>p.name===me.name);
+      let fresh = (season.roster||[]).find(p=>p.name===me.name);
+      // Same rename self-heal as loadGroup. This is the LIVE path: an admin
+      // renaming someone whose app is open repairs that device immediately,
+      // instead of the device carrying a stale name until its next cold boot.
+      if(!fresh && me.userId) fresh = (season.roster||[]).find(p=>p && p.userId===me.userId);
       if(fresh) me = fresh;
     }
     refresh();
@@ -1877,6 +1996,14 @@ function renderHome(){
   if(!groupData||!me) return;
   try { renderMirrorHome(); }
   catch(e){ logErr('renderMirrorHome', e); }
+  // Restoring the div was only half of it — renderGoalRing() was never called
+  // from the render loop either, only from its own lazy loader and the Cancel
+  // button, so nothing would have painted it. Isolated: a goal-ring failure
+  // must never take Home down with it.
+  try { renderGoalRing(); }
+  catch(e){ logErr('renderGoalRing', e); }
+  try { renderMondayRecap(); }
+  catch(e){ logErr('renderMondayRecap', e); }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -2853,7 +2980,7 @@ function mirRenderMix(){
   if(_mirMixMode==='month'){
     logs=(allLogs||[]).filter(l=>l.player===me.name && !l.voided);
   } else {
-    if(!_mirMineAll){ mirLoadMineAll().then(()=>mirRenderMix()); el.innerHTML='<div class="tmuted" style="font-size:12px">Adding it all up…</div>'; if(statEl) statEl.textContent=''; return; }
+    if(!_mirMineAll){ mirLoadMineAll().then(()=>mirRenderMix()); el.innerHTML=skLines(4); if(statEl) statEl.textContent=''; return; }
     logs=_mirMineAll;
   }
   const r=_mixCount(logs);
@@ -2872,6 +2999,38 @@ function mirRenderMix(){
   }).join('') + (more>0?`<div class="tmuted" style="font-size:11px;margin-top:4px">+ ${more} more type${more===1?'':'s'}</div>`:'');
   mirRenderMixRec();
 }
+// ── ONE REAL WORKOUT, ONE ROW ───────────────────────────────────────────────
+// Someone in three groups logs the SAME session three times — three docs with
+// three ids, because a log belongs to a group. The de-dupe below is by doc id,
+// which stops ONE doc being counted twice across the two queries but cannot see
+// that THREE docs are one workout. So every all-time personal stat read 3x for
+// anyone multi-group: one tagged chest day showed as three, while "this month"
+// (single group, one doc) correctly showed one. The toggle disagreed with
+// itself, which is exactly how it was spotted.
+//
+// Real-world identity is the calendar day plus the workout set, never the doc.
+// Two genuinely different sessions on one day (a gym session, then a run) keep
+// different keys and both survive. Where the same session was tagged in one
+// group and logged bare in another, the richer note wins, so a muscle tag is
+// never lost to de-duplication.
+//
+// Group-scoped surfaces (scoring, leaderboards, the feed) must NOT use this —
+// there, three logs in three groups genuinely are three separate entries.
+function _sessionKey(l){
+  const ws=(Array.isArray(l.workouts)?l.workouts:(l.workout?[l.workout]:[]))
+    .map(w=>String(w||'').trim().toLowerCase()).filter(Boolean).sort();
+  return `${l.year||0}-${l.month||0}-${l.day||0}|${ws.join('+')}`;
+}
+function _dedupeSessions(logs){
+  const by=new Map();
+  (logs||[]).forEach(l=>{
+    const k=_sessionKey(l), prev=by.get(k);
+    if(!prev){ by.set(k,l); return; }
+    if(String(l.note||'').trim().length > String(prev.note||'').trim().length) by.set(k,l);
+  });
+  return [...by.values()];
+}
+
 function mirLoadMineAll(){
   if(_mirInflight['mine']) return _mirInflight['mine'];
   const p=(async()=>{
@@ -2902,7 +3061,10 @@ function mirLoadMineAll(){
                        .where('player','==',s.player.name).get());
         }catch(e){ logErr('mirLoadMineAll: name pass '+s.code, e); }
       }
-      _mirMineAll=out;
+      // Collapse the same real workout logged into several groups. Every
+      // consumer of this cache is a PERSONAL all-time stat, so one session
+      // must count once no matter how many leaderboards it fed.
+      _mirMineAll=_dedupeSessions(out);
     }catch(e){ logErr('mirLoadMineAll', e); _mirMineAll=_mirMineAll||[]; }
   })();
   _mirInflight['mine']=p;
@@ -3043,7 +3205,7 @@ function mirRenderLift(){
   else {
     if(!_mirMineAll){
       mirLoadMineAll().then(()=>mirRenderLift());
-      body.innerHTML='<div class="tmuted" style="font-size:12px">Adding it all up…</div>';
+      body.innerHTML=skLines(3);
       statEl.textContent=''; nudgeEl.innerHTML=''; return;
     }
     logs=_mirMineAll;
@@ -3506,9 +3668,13 @@ async function renderProfile(){
     seasonsEl.innerHTML='';
     return;
   }
-  statsEl.innerHTML='<div class="tmuted">Loading…</div>';
-  seasonsEl.innerHTML='<div class="tmuted">Loading…</div>';
+  statsEl.innerHTML=skLines(3);
+  seasonsEl.innerHTML=skRows(2);
   renderProfileInsights();   // parallel + independent — an insights failure never blocks stats/seasons
+  renderDeleteAccountCard(); // ditto — never let the delete card break the tab
+  renderGoogleAuthCard();    // inert while FEATURE_GOOGLE_AUTH is off
+  loadMyAuthState();         // one doc read, only when the flag is on
+  renderPushCard();          // inert while FEATURE_PUSH is off
   try{
     const uSnap = await db.collection('users').doc(me.userId).get();
     const stats = (uSnap.exists && uSnap.data().stats) || {};
@@ -3622,6 +3788,464 @@ function openArchivedRecap(i){
   const d=buildRecapDataFromArchive(s);
   if(window.__recapShowFromData) window.__recapShowFromData(d);
 }
+
+// ── PUSH NOTIFICATIONS ─────────────────────────────────────────────────────
+// The opt-in surface. The sending side is a Cloud Function (functions/index.js)
+// that needs Blaze; this half only earns the permission and stores the token.
+//
+// TOKENS LIVE ON THE USER DOC, KEYED BY TOKEN STRING, not as a single field —
+// one person legitimately has several devices, and a phone plus a laptop must
+// both ring. Each entry carries a timestamp so the sender can prune tokens that
+// have stopped accepting delivery instead of retrying them forever.
+//
+// PERMISSION IS ASKED FROM A BUTTON, NEVER ON LOAD. A browser only grants the
+// prompt once; spending it on someone's first three seconds is how you get a
+// permanent "blocked" and no second chance.
+function renderPushCard(){
+  const hdr=document.getElementById('pushShdr'), el=document.getElementById('pushCard');
+  if(!hdr||!el) return;
+  if(!window.FEATURE_PUSH || !me || !me.userId || !window.pushSupported()){
+    hdr.style.display='none'; el.style.display='none'; return;
+  }
+  hdr.style.display=''; el.style.display='';
+  const perm=window.pushPermission();
+  const on=!!window._myPushToken;
+
+  if(perm==='denied'){
+    el.innerHTML='<div class="tmuted" style="font-size:12px">'
+      + 'Notifications are blocked for Forge in your browser settings. '
+      + 'You will need to allow them there first — we cannot ask again from here.</div>';
+    return;
+  }
+  el.innerHTML = on
+    ? '<div class="tmuted" style="font-size:12px">'
+      + mirIco('g-flame','color:var(--green)')
+      + ' <b>Notifications on for this device.</b><br>'
+      + 'You will hear from Forge when your team\'s streak is at risk, and when the '
+      + 'week\'s recap is ready. Nothing else — no daily nagging.</div>'
+      + '<button class="btn btn-surface" style="margin:10px 0 0" onclick="disablePushHere()">Turn off on this device</button>'
+    : '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
+      + 'Forge can only reach you when you remember to open it — which is the wrong way round. '
+      + 'Turn this on and we will tell you the two things worth interrupting you for: '
+      + '<b>your team\'s streak is about to break tonight</b>, and <b>last week\'s recap is ready</b>.'
+      + '<br><br>That is all. No "don\'t forget to exercise".</div>'
+      + '<button class="btn btn-gold" id="pushBtn" style="margin:0" onclick="turnOnPush()">Turn on notifications</button>'
+      + '<div id="pushResult" style="margin-top:10px;font-size:13px"></div>';
+}
+
+async function turnOnPush(){
+  const out=document.getElementById('pushResult');
+  const say=(m,bad)=>{ if(out){ out.style.color=bad?'var(--red)':'var(--muted)'; out.textContent=m; } };
+  const btn=document.getElementById('pushBtn');
+  if(btn){ btn.disabled=true; btn.textContent='Asking…'; }
+  try{
+    const token=await enablePush();
+    if(!token){ say('You said no — that is fine. You can turn this on any time.');
+                if(btn){ btn.disabled=false; btn.textContent='Turn on notifications'; }
+                renderPushCard(); return; }
+    await savePushToken(token);
+    window._myPushToken=token;
+    toast('Notifications on.','success');
+    renderPushCard();
+  }catch(e){
+    if(e && e.message==='FEATURE_OFF'){ say('Notifications are not switched on yet.',true); }
+    else if(e && e.message==='UNSUPPORTED'){ say('This browser cannot do notifications. Try the installed app.',true); }
+    else { logErr('turnOnPush', e); say('Could not turn notifications on. Check your connection and try again.',true); }
+    if(btn){ btn.disabled=false; btn.textContent='Turn on notifications'; }
+  }
+}
+
+async function savePushToken(token){
+  if(!me || !me.userId || !token) return;
+  // Dotted path so two devices adding tokens at once cannot clobber each other,
+  // which a whole-map write would.
+  await db.collection('users').doc(me.userId).set({
+    pushTokens: { [token]: { addedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                             ua: (navigator.userAgent||'').slice(0,120) } }
+  }, {merge:true});
+}
+
+async function disablePushHere(){
+  try{
+    const t=window._myPushToken;
+    if(t && me && me.userId){
+      await db.collection('users').doc(me.userId).update({
+        ['pushTokens.'+t]: firebase.firestore.FieldValue.delete()
+      });
+    }
+    // best-effort: only possible if the SDK actually loaded
+    try{ if(firebase.messaging) await firebase.messaging().deleteToken(); }catch(e){}
+    window._myPushToken=null;
+    toast('Notifications off for this device.','success');
+    renderPushCard();
+  }catch(e){ logErr('disablePushHere', e); toast('Could not turn them off — try again.','error'); }
+}
+
+// Silent refresh on boot: if permission is already granted, re-fetch the token
+// (FCM rotates them) and make sure the stored copy is current. No prompt, no UI.
+async function refreshPushTokenQuietly(){
+  try{
+    if(!window.FEATURE_PUSH || !window.pushSupported()) return;
+    if(window.pushPermission()!=='granted') return;
+    if(!me || !me.userId) return;
+    const token=await enablePush();          // already granted, so this won't prompt
+    if(token){ window._myPushToken=token; await savePushToken(token); }
+    startForegroundPush(function(d){
+      // In-app arrival becomes a toast, never a system notification over the app.
+      if(d && d.body) toast(d.body);
+    });
+  }catch(e){ logErr('refreshPushTokenQuietly', e); }
+}
+window.refreshPushTokenQuietly = refreshPushTokenQuietly;
+
+// ── GOOGLE SIGN-IN — AUTH PHASE 1 ──────────────────────────────────────────
+// Contract: AUTH_DESIGN_FINAL.md Option A, locked 25 Jul 2026.
+// Phase 1 is COEXISTENCE ONLY: linking a Google account records authUid on the
+// users doc and changes nothing else. PIN login still works, anonymous boot
+// still works, and no rule reads authUid yet — that lands in Phase 2 with the
+// claim Function. So the worst case of a bug here is a user who linked and saw
+// no benefit, never a user who cannot get in.
+//
+// EVERY surface is gated on FEATURE_GOOGLE_AUTH. With it false, renderGoogleAuthCard
+// hides both elements and returns, and consumeGoogleRedirect resolves {linked:false}
+// without touching the network.
+function renderGoogleAuthCard(){
+  const hdr = document.getElementById('googleAuthShdr');
+  const el  = document.getElementById('googleAuthCard');
+  if(!hdr || !el) return;
+  if(!window.FEATURE_GOOGLE_AUTH || !me || !me.userId){
+    hdr.style.display='none'; el.style.display='none'; return;
+  }
+  hdr.style.display=''; el.style.display='';
+  const linked = !!(window._myAuthUid);
+  el.innerHTML = linked
+    ? '<div class="tmuted" style="font-size:12px">'
+      + mirIco('g-flame','color:var(--green)')
+      + ' <b>Secured with Google</b>' + (window._myAuthEmail ? (' — ' + esc(window._myAuthEmail)) : '')
+      + '<br>You can sign in on any device without a PIN. Your streak and history come with you.</div>'
+    : '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
+      + 'Right now your account lives on <b>this device</b>. Clear your browser data or change '
+      + 'phone and you have to rejoin each group by hand. Link a Google account and it follows you.</div>'
+      + '<button class="btn btn-gold" id="googleLinkBtn" style="margin:0" onclick="linkGoogleAccount()">Secure my account with Google</button>'
+      + '<div id="googleAuthResult" style="margin-top:10px;font-size:13px"></div>';
+}
+
+async function linkGoogleAccount(){
+  const out = document.getElementById('googleAuthResult');
+  const say = (m,bad)=>{ if(out){ out.style.color = bad ? 'var(--red)' : 'var(--muted)'; out.textContent = m; } };
+  try{
+    say('Opening Google…');
+    await startGoogleSignIn();      // navigates away; nothing after this runs
+  }catch(e){
+    if(e && e.message==='FEATURE_OFF'){ say('Google sign-in is not switched on yet.', true); return; }
+    logErr('linkGoogleAccount', e);
+    say('Could not open Google sign-in. Check your connection and try again.', true);
+  }
+}
+
+// Called once on boot, AFTER me/userId are known. Writes the identity link.
+// Fire-and-forget by design: this must never be able to block or fail a launch.
+async function finishGoogleLinkIfReturning(){
+  if(!window.FEATURE_GOOGLE_AUTH) return;
+  try{
+    const r = await consumeGoogleRedirect();
+    if(r.error === 'ALREADY_IN_USE'){
+      toast('That Google account already runs another Forge account.','error');
+      return;
+    }
+    if(r.error === 'PROVIDER_DISABLED'){
+      logErr('googleAuth', new Error('provider not enabled in the Firebase console'));
+      return;
+    }
+    if(!r.linked) return;
+    window._myAuthUid   = r.uid;
+    window._myAuthEmail = r.email;
+    if(me && me.userId){
+      // merge, never overwrite: this doc holds the credential and the stats.
+      // authUid is written here in Phase 1; Phase 2 makes it server-owned so a
+      // client can never point someone else's identity at its own Google uid.
+      await db.collection('users').doc(me.userId).set({
+        authUid: r.uid,
+        email: r.email || null,
+        authLinkedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, {merge:true});
+    }
+    renderGoogleAuthCard();
+    toast('Account secured with Google.','success');
+  }catch(e){ logErr('finishGoogleLinkIfReturning', e); }
+}
+window.finishGoogleLinkIfReturning = finishGoogleLinkIfReturning;
+
+// Load the link state for the card. Cheap: one doc read, only when the flag is on.
+async function loadMyAuthState(){
+  if(!window.FEATURE_GOOGLE_AUTH || !me || !me.userId) return;
+  try{
+    const s = await db.collection('users').doc(me.userId).get();
+    if(s.exists){ const u=s.data(); window._myAuthUid=u.authUid||null; window._myAuthEmail=u.email||null; }
+  }catch(e){ logErr('loadMyAuthState', e); }
+  renderGoogleAuthCard();
+}
+
+// ── ACCOUNT DELETION ────────────────────────────────────────────────────────
+// Google Play requires an IN-APP deletion path for a production listing, not
+// just the web page at goforge.in/delete-account.html.
+//
+// WHAT THIS CAN AND CANNOT DO, AND WHY.
+// The rules deliberately freeze history: logs are delete:false and their updates
+// are restricted to hasOnly(['voided','voidedBy','voidedAt']), so `player` can
+// never be rewritten by a client; users docs are delete:false. That is the
+// tombstone model and it is load-bearing — it is what stops a malicious client
+// erasing someone else's month. So this flow does everything a client
+// legitimately can: roster entry removed · groups.players entry removed · every
+// log voided · users doc scrubbed to 'Deleted user' with pinHash/devices/
+// memberships cleared and stats zeroed · reactions and flags deleted · device
+// wiped. It leaves exactly one residue: the frozen `player` string on voided log
+// docs, plus bonuses_30day / jackAwards / bets, which no client may touch.
+// scripts/scrub-deleted-user.mjs (Admin SDK, run by hand) finishes those inside
+// the 30-day window the web page promises.
+//
+// ORDERING IS THE WHOLE DESIGN. deletionRequestedAt is stamped FIRST and
+// deletedAt LAST, so a run that dies halfway is detectable ("requested but not
+// finished") and every step is idempotent, letting the boot hook re-run it.
+// Logs are voided BEFORE the roster entry is removed, because the roster entry
+// is where that group's LOCAL name comes from — remove it first and a resumed
+// run can no longer find the logs.
+const DELETED_NAME = 'Deleted user';
+
+function renderDeleteAccountCard(){
+  const el = document.getElementById('deleteAccountCard');
+  if(!el) return;
+  if(!me || !me.userId){
+    el.innerHTML = '<div class="tmuted">Available once your profile finishes setting up.</div>';
+    return;
+  }
+  const n = getSessions().length || 1;
+  el.innerHTML =
+    '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
+    + 'Deleting removes your name, PIN, streaks and stats from '
+    + (n>1 ? ('all <b>'+n+'</b> of your groups') : 'your group')
+    + ', and hides every workout you have logged. Your teammates keep their own history. '
+    + 'Anything still carrying your name is purged within 30 days.</div>'
+    + '<div class="tmuted" style="font-size:12px;margin-bottom:10px"><b>This cannot be undone.</b> '
+    + 'Type <b>DELETE</b> to confirm.</div>'
+    + '<input type="text" id="delConfirmInput" placeholder="Type DELETE" maxlength="6" '
+    + 'autocapitalize="characters" style="margin-bottom:8px" oninput="onDelConfirmInput()">'
+    + '<button class="btn" id="delAccountBtn" disabled style="margin:0;background:var(--red);color:#fff;opacity:.5" '
+    + 'onclick="startAccountDeletion()">Delete my account</button>'
+    + '<div id="delResult" style="margin-top:10px;font-size:13px"></div>'
+    + '<div class="tmuted" style="font-size:11px;margin-top:10px">'
+    + 'Prefer email? <a href="https://goforge.in/delete-account.html" target="_blank" rel="noopener" '
+    + 'style="color:var(--gold)">Request deletion on the web</a>.</div>';
+}
+
+function onDelConfirmInput(){
+  const v=(document.getElementById('delConfirmInput')||{}).value||'';
+  const b=document.getElementById('delAccountBtn'); if(!b) return;
+  const ok = v.trim().toUpperCase()==='DELETE';
+  b.disabled=!ok; b.style.opacity = ok?'1':'.5';
+}
+
+function _delSay(msg){
+  const el=document.getElementById('delResult');
+  if(el){ el.style.color='var(--muted)'; el.textContent=msg; }
+}
+
+async function startAccountDeletion(){
+  if(!me || !me.userId) return;
+  if(!confirm('This permanently deletes your Forge account and hides all your workouts. It cannot be undone. Continue?')) return;
+  const btn=document.getElementById('delAccountBtn');
+  if(btn){ btn.disabled=true; btn.style.opacity='.5'; btn.textContent='Deleting…'; }
+  try{
+    await executeAccountDeletion(me.userId, _delSay);
+    _delSay('Account deleted. Signing you out…');
+    setTimeout(finishAccountDeletionLocally, 1200);
+  }catch(e){
+    logErr('startAccountDeletion', e);
+    const el=document.getElementById('delResult');
+    if(el){ el.style.color='var(--red)';
+      el.textContent='Deletion did not finish — check your connection and try again. Nothing is left half-done: reopening the app resumes it.'; }
+    if(btn){ btn.disabled=false; btn.style.opacity='1'; btn.textContent='Delete my account'; }
+  }
+}
+
+// Idempotent by construction: every step checks whether it already happened, so
+// the boot hook can safely re-run this after a mid-sweep failure.
+async function executeAccountDeletion(userId, say){
+  say = say || function(){};
+  const uRef = db.collection('users').doc(userId);
+  const uSnap = await uRef.get();
+  if(!uSnap.exists) throw new Error('NO_USER_DOC');
+  const u = uSnap.data();
+  const already = !!u.deletedAt;
+
+  // Which groups, and what am I called in each? Names differ per group (that is
+  // exactly the Riya bug), so the log queries need the LOCAL name per group.
+  const sweep = Object.assign({}, u.deletionSweep||{});
+  if(!Object.keys(sweep).length){
+    const codes = Object.keys(u.memberships||{});
+    if(!codes.length && window.groupCode) codes.push(groupCode);
+    for(const gc of codes){
+      try{
+        const gS = await db.collection('groups').doc(gc).get();
+        if(!gS.exists) continue;
+        const sid = gS.data().currentSeasonId; if(!sid) continue;
+        const sS = await db.collection('groups').doc(gc).collection('seasons').doc(sid).get();
+        if(!sS.exists) continue;
+        const entry = (sS.data().roster||[]).find(p =>
+          (p.userId && p.userId===userId) ||
+          (u.nameLower && String(p.name||'').toLowerCase()===u.nameLower));
+        if(entry) sweep[gc] = entry.name;
+      }catch(e){ logErr('deletion:discover:'+gc, e); }
+    }
+  }
+
+  // BEACON FIRST. deletionSweep is the per-group name map the admin scrubber
+  // still needs after this flow has erased `name` from the user doc.
+  if(!already){
+    await uRef.update({
+      deletionRequestedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      deletionSweep: sweep
+    });
+  }
+
+  const codes = Object.keys(sweep);
+  let gi=0, firstDeparted=null;
+  for(const gc of codes){
+    gi++;
+    say('Removing you from group '+gi+' of '+codes.length+'…');
+    const nm = await deleteFromOneGroup(gc, sweep[gc], userId);
+    if(nm && !firstDeparted) firstDeparted = nm;
+  }
+
+  say('Finishing…');
+  // The account carries the FIRST departure name it was given. Per-group names
+  // can differ (each group assigns from its own unused pool), and the account
+  // needs exactly one label.
+  const acctName = firstDeparted || DELETED_NAME;
+  await uRef.update({
+    name: acctName,
+    nameLower: acctName.toLowerCase(),
+    deleted: true,
+    pinHash: null,
+    knownDeviceUids: [],
+    memberships: {},
+    stats: { seasonsPlayed:0, monthsLogged:0, monthsList:[], badgeCounts:{},
+             totalWorkouts:0, currentStreak:0, longestStreak:0, lastLoggedDay:null },
+    deletedAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+  if(!already) bumpGlobalStat('totalUsers', -1);   // guarded: only the first completing run
+  return true;
+}
+
+async function deleteFromOneGroup(gc, localName, userId){
+  // 1. Void this person's logs FIRST (see ordering note above). Two queries
+  //    merged by id: never query by player name alone — two real people have
+  //    shared a first name in these groups before.
+  const ids = new Map();
+  try{
+    const byUid = await db.collection('logs').where('groupCode','==',gc).where('userId','==',userId).get();
+    byUid.forEach(d=>ids.set(d.id, d.data()));
+  }catch(e){ logErr('deletion:logsByUid:'+gc, e); }
+  if(localName){
+    try{
+      const byName = await db.collection('logs').where('groupCode','==',gc).where('player','==',localName).get();
+      byName.forEach(d=>{ const v=d.data(); if(!v.userId || v.userId===userId) ids.set(d.id, v); });
+    }catch(e){ logErr('deletion:logsByName:'+gc, e); }
+  }
+  let voided=0;
+  const entries=[...ids.entries()].filter(function(kv){ return !kv[1].voided; });   // idempotent re-run
+  for(let i=0;i<entries.length;i+=400){
+    const batch=db.batch();
+    entries.slice(i,i+400).forEach(function(kv){
+      batch.update(db.collection('logs').doc(kv[0]), {
+        voided:true,
+        voidedBy:'account-deletion',   // NOT the user's name — that would defeat the purpose
+        voidedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      if(kv[1].demo!==true) voided++;  // demo logs never incremented the counters
+    });
+    await batch.commit();
+  }
+  if(voided) bumpGlobalStat('totalLogs', -voided);
+
+  // 2. Best-effort purges the rules DO allow. Never block the flow.
+  try{
+    const rs = await db.collection('reactions').where('groupCode','==',gc).where('player','==',localName).get();
+    for(const d of rs.docs){ try{ await d.ref.delete(); }catch(e){} }
+  }catch(e){}
+  try{
+    const fs = await db.collection('flags').where('groupCode','==',gc).where('player','==',localName).get();
+    for(const d of fs.docs){ try{ await d.ref.delete(); }catch(e){} }
+  }catch(e){}
+
+  // 3. THE HALL OF THE DEPARTED (locked decision, AUTH_DESIGN_FINAL Q4).
+  //    The roster row is NOT removed — it is renamed to a departure name and
+  //    stripped of every identifying field. A group's league history is the
+  //    GROUP's shared record: deleting the row would silently rewrite past
+  //    standings for everyone who competed against them. Keeping a pseudonymous
+  //    row preserves the season; `departed:true` is what stops it counting
+  //    toward the team-streak threshold going forward (scoringEngine).
+  const gRef = db.collection('groups').doc(gc);
+  const gS = await gRef.get(); if(!gS.exists) return null;
+  const sid = gS.data().currentSeasonId; if(!sid) return null;
+  const sRef = gRef.collection('seasons').doc(sid);
+  let assigned = null;
+  await db.runTransaction(async tx=>{
+    const sSnap = await tx.get(sRef); if(!sSnap.exists) return;
+    const gSnap = await tx.get(gRef);
+    const roster = sSnap.data().roster||[];
+    const i = roster.findIndex(p => p && (
+      (p.userId && p.userId===userId) ||
+      (localName && String(p.name||'').toLowerCase()===String(localName).toLowerCase())));
+    if(i < 0) return;                                  // already done — clean re-run
+    if(roster[i].departed === true){ assigned = roster[i].name; return; }   // idempotent
+    const departedName = pickDepartedName(roster);
+    // Rebuilt, not spread: every identity-bearing field (userId, uid, pinHash,
+    // pin, globalConsent, isAdmin) must be GONE, not merely overwritten.
+    roster[i] = { name: departedName, team: roster[i].team || 'A',
+                  role: 'Player', departed: true };
+    assigned = departedName;
+    tx.update(sRef, {roster});
+    const players = (gSnap.exists && gSnap.data().players) || [];
+    let touched = false;
+    players.forEach(p=>{
+      if(p && typeof p==='object' && String(p.name||'').toLowerCase()===String(localName||'').toLowerCase()){
+        p.name = departedName; touched = true;
+      }
+    });
+    if(touched) tx.update(gRef, {players});
+  });
+  return assigned;
+}
+
+function finishAccountDeletionLocally(){
+  try{ getSessions().forEach(s=>removeSession(s.code)); }catch(e){}
+  try{
+    Object.keys(localStorage).filter(k=>k.indexOf('forge_')===0).forEach(k=>localStorage.removeItem(k));
+  }catch(e){}
+  try{
+    if(typeof window.hardResetDevice==='function'){ window.hardResetDevice('account-deleted'); return; }
+  }catch(e){}
+  location.reload();
+}
+
+// RESUME HOOK. A sweep that died halfway leaves deletionRequestedAt set and
+// deletedAt unset; finish it silently on the next app open. Wrapped so a throw
+// here can never block boot — this sits on the login path, the highest
+// blast-radius code in the app.
+async function resumeAccountDeletionIfPending(userId){
+  try{
+    if(!userId) return false;
+    const s = await db.collection('users').doc(userId).get();
+    if(!s.exists) return false;
+    const d = s.data();
+    if(!d.deletionRequestedAt || d.deletedAt) return false;
+    await executeAccountDeletion(userId, function(){});
+    finishAccountDeletionLocally();
+    return true;
+  }catch(e){ logErr('resumeAccountDeletion', e); return false; }
+}
+window.resumeAccountDeletionIfPending = resumeAccountDeletionIfPending;
 
 // ── PROFILE INSIGHTS (direct user request: "in the last 50 workouts, you've
 // done strength 10 times, cardio 10 times") ────────────────────────────────
@@ -4011,7 +4635,10 @@ function writeGlobalStats(){
     roster.forEach(p=>{
       const t = score(p.name).total;
       total += t;
-      if(p.globalConsent===true) players.push({ name:p.name, points:t });
+      // userId rides along so the Global board can tell "the same person in
+      // three groups" from "three different people". Name alone cannot: two
+      // pairs of real players in these groups share a first name.
+      if(p.globalConsent===true) players.push({ name:p.name, points:t, userId:p.userId||null });
     });
     const count = roster.length;
     const avg = count ? Math.round(total/count) : 0;
@@ -4316,6 +4943,137 @@ function countUp(el, to, dur){
   })(performance.now());
 }
 
+// ── NUMBERS THAT MOVED ──────────────────────────────────────────────────────
+// A number that snaps from 41 to 46 is a new fact you have to notice. A number
+// that TRAVELS there is your fact changing, and you cannot miss it. That is the
+// whole competitive mechanic, and until now it was invisible.
+//
+// The rule that keeps this from becoming noise: animate ONLY when the value
+// actually changed since the last render. The board re-renders on every
+// Firestore snapshot, so counting up on every repaint would leave the screen
+// permanently twitching. First sight of a number is never animated either —
+// there is nothing to travel from, and a page that counts every figure up from
+// zero on arrival is a dashboard demo, not an app you use daily.
+//
+// Keyed per element (data-num) rather than per position, so a player moving
+// rank keeps their own number's history instead of inheriting the number of
+// whoever now occupies that row.
+const _numLast=new Map();
+function countFromTo(el,from,to,dur){
+  const start=performance.now(), delta=to-from;
+  (function tick(now){
+    const t=Math.min(1,(now-start)/dur);
+    el.textContent=Math.round(from + delta*(1-Math.pow(1-t,3)));
+    if(t<1) requestAnimationFrame(tick); else el.textContent=to;
+  })(performance.now());
+}
+function tickNumbers(root){
+  if(!root) return;
+  const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  root.querySelectorAll('[data-num]').forEach(el=>{
+    const key=el.getAttribute('data-num');
+    const to=Number(String(el.textContent).trim());
+    if(!isFinite(to)) return;
+    const from=_numLast.get(key);
+    _numLast.set(key,to);
+    if(reduce || from===undefined || from===to) return;
+    countFromTo(el, from, to, 620);
+    // The pop is what you actually notice — a 3-point change counts up in
+    // increments too small to register on their own. Class is removed first so
+    // a second change during the same session restarts the animation instead of
+    // being ignored as already-applied.
+    el.classList.remove('num-moved');
+    void el.offsetWidth;                        // force reflow, restart the run
+    el.classList.add('num-moved');
+    setTimeout(()=>el.classList.remove('num-moved'), 600);
+  });
+}
+
+// ── RANK SLIDE (FLIP) ───────────────────────────────────────────────────────
+// Overtaking someone is the entire point of this app, and until now it happened
+// silently: the list simply repainted in a new order and you had to remember
+// where you used to be. Rows now travel to their new position, so you SEE the
+// pass happen.
+//
+// FLIP, because innerHTML is replaced wholesale and there are no surviving
+// nodes to transition. Measure each row's offset before the repaint, measure
+// again after, then jump every moved row back to where it was and let it
+// travel forwards. Two frames of work, no layout thrash.
+//
+// Offsets are measured RELATIVE TO THE CONTAINER, never the viewport. If the
+// team standings above grow by a row, a viewport-relative measure would see
+// every row shift by the same amount and slide the whole list for no reason.
+// Container-relative deltas are purely about position WITHIN the ranking, which
+// is the only movement worth showing.
+//
+// Four things it deliberately refuses to do:
+//   · nothing to compare against (first paint, or the skeleton, which carries
+//     no data-row at all) — the empty map guard handles both for free
+//   · a row that didn't move gets no transform, so a snapshot that only changes
+//     points animates the numbers and leaves the rows alone
+//   · never while .page.fresh is set: the arrival stagger already owns these
+//     rows and two animations on one element reads as a glitch
+//   · never under prefers-reduced-motion
+function flipCapture(box){
+  const m=new Map();
+  if(!box) return m;
+  const base=box.getBoundingClientRect().top;
+  box.querySelectorAll('[data-row]').forEach(el=>{
+    m.set(el.getAttribute('data-row'), el.getBoundingClientRect().top - base);
+  });
+  return m;
+}
+function flipPlay(box, before){
+  if(!box || !before || !before.size) return;
+  if(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if(box.closest('.page.fresh')) return;
+  const base=box.getBoundingClientRect().top, moves=[];
+  box.querySelectorAll('[data-row]').forEach(el=>{
+    const k=el.getAttribute('data-row');
+    if(!before.has(k)) return;                       // joined since last paint
+    const dy=before.get(k)-(el.getBoundingClientRect().top-base);
+    if(Math.abs(dy)<1) return;                       // stayed put
+    moves.push([el,dy]);
+  });
+  if(!moves.length) return;
+  moves.forEach(([el,dy])=>{ el.style.transition='none'; el.style.transform=`translateY(${dy}px)`; });
+  requestAnimationFrame(()=>{
+    moves.forEach(([el])=>{
+      el.style.transition='transform .5s cubic-bezier(.2,.7,.3,1)';
+      el.style.transform='';
+    });
+    // Strip the inline styles once it lands. Left behind, the transition would
+    // still be attached the next time anything touched this row's transform.
+    setTimeout(()=>moves.forEach(([el])=>{ el.style.transition=''; el.style.transform=''; }), 560);
+  });
+}
+
+// ── SKELETONS ───────────────────────────────────────────────────────────────
+// Shape-matched placeholders for the surfaces that genuinely wait on the
+// network. See the SKELETONS block in main.css for why these exist and why the
+// dimensions are copied from the real rows rather than invented.
+//
+// Widths vary per row on purpose. A column of identical bars reads as a
+// loading graphic; slightly ragged ones read as text that hasn't resolved yet,
+// which is what it actually is.
+const _SK_W=[46,62,38,54,44,58,40,50];
+function skRows(n=5){
+  let h='';
+  for(let i=0;i<n;i++) h+=`<div class="sk-row">
+    <div class="sk sk-av"></div>
+    <div class="sk-body">
+      <div class="sk sk-l1" style="width:${_SK_W[i%_SK_W.length]}%"></div>
+      <div class="sk sk-l2"></div>
+    </div>
+    <div class="sk sk-num"></div></div>`;
+  return h;
+}
+function skLines(n=3){
+  let h='';
+  for(let i=0;i<n;i++) h+=`<div class="sk sk-line" style="width:${_SK_W[i%_SK_W.length]+22}%"></div>`;
+  return h;
+}
+
 // Lightweight DOM confetti — no library.
 function fireConfetti(){
   const colors=['#f59e0b','#22c55e','#ffffff','#fb923c','#fbbf24'];
@@ -4407,6 +5165,134 @@ function computeRewardData(newLogIds){
   }catch(e){}
   return { myCount, pace, teamName:'Team '+(me.team||'—'), teamCount,
            movedTo, rankBefore, board, passed, nextGap, nextName, bestWeek };
+}
+
+// ── MONDAY RECAP ──────────────────────────────────────────────────────────
+// The week that just ENDED, shown on the morning a new one starts.
+//
+// WHY THIS EXISTS AND THE MOVER DOESN'T COVER IT. computeWeeklyMover() is a
+// LIVE mid-week race ("who is climbing right now") and it deliberately returns
+// null on Mon/Tue, because one day into a week there is no race yet. That left
+// Monday — the exact moment a fresh week opens and people most need a reason to
+// re-engage — as the quietest surface in the app. This fills that gap and does
+// the opposite job: it looks backward, closes the week off, and hands you a
+// clean slate.
+//
+// SCOPE HONESTY: allLogs is the CURRENT month only. When last week spilled into
+// the previous month (any Monday in the first week of a month), the numbers here
+// would be silently partial. Rather than quietly under-report, the recap covers
+// only the days it can actually see and says so. No extra reads, same as the
+// Mover — a recap is not worth a query bill.
+const MONDAY_RECAP_KEY = 'forge_wkrecap_';
+
+function lastWeekWindow(now){
+  const dow=(now.getDay()+6)%7;                    // 0=Mon
+  const monThis=new Date(now.getFullYear(),now.getMonth(),now.getDate()-dow);
+  const monLast=new Date(monThis.getFullYear(),monThis.getMonth(),monThis.getDate()-7);
+  const sunLast=new Date(monThis.getFullYear(),monThis.getMonth(),monThis.getDate()-1);
+  return {monLast,sunLast};
+}
+
+function computeMondayRecap(){
+  try{
+    if(!season || !Array.isArray(allLogs) || !me) return null;
+    const now=new Date();
+    const dow=(now.getDay()+6)%7;
+    // Monday and Tuesday only. Monday is the point; Tuesday is grace for anyone
+    // who didn't open the app on Monday. By Wednesday it is stale news and the
+    // Mover has taken over.
+    if(dow>1) return null;
+    // Before 6am Monday the week hasn't turned over yet — same boundary the
+    // season rollover and the Mover both use, so the three can never disagree.
+    if(dow===0 && now.getHours()<6) return null;
+    if(now.getMonth()+1!==season.month || now.getFullYear()!==season.year) return null;
+
+    const {monLast,sunLast}=lastWeekWindow(now);
+    const key=`${MONDAY_RECAP_KEY}${groupCode}_${monLast.getFullYear()}-${monLast.getMonth()+1}-${monLast.getDate()}`;
+    try{ if(localStorage.getItem(key)==='1') return null; }catch(e){}
+
+    // Which of last week's days fall inside the month we actually have logs for?
+    const sameMonth=d=>d.getMonth()+1===season.month && d.getFullYear()===season.year;
+    const days=[]; const cur=new Date(monLast);
+    while(cur<=sunLast){ if(sameMonth(cur)) days.push(cur.getDate()); cur.setDate(cur.getDate()+1); }
+    if(!days.length) return null;                       // whole week was last month
+    const partial = days.length<7;
+
+    const inWeek=new Set(days);
+    const weekLogs=allLogs.filter(l=>l && inWeek.has(l.day));
+    if(!weekLogs.length) return null;                   // a silent week deserves silence
+
+    const roster=(season.roster||[]).filter(p=>p&&p.name);
+    const mine=weekLogs.filter(l=>l.player===me.name);
+    const myDays=new Set(mine.map(l=>l.day)).size;
+    const people=new Set(weekLogs.map(l=>l.player)).size;
+
+    // Rank movement across the week, using the same before/after trick as the
+    // Mover: score everyone with last week's logs removed, then with them in.
+    let climber=null;
+    try{
+      const prior=allLogs.filter(l=>l && l.day < days[0]);
+      if(prior.length){
+        const order=ls=>roster.map(p=>({name:p.name,total:score(p.name,{
+          season, groupCode, logs:ls, twists:activeTwists, bonuses:bonus30,
+          jackAwards, ironPledgeBonuses, twistWindows}).total})).sort((a,b)=>b.total-a.total);
+        const rankOf=rs=>{const m=new Map();rs.forEach((r,i)=>m.set(r.name,i+1));return m;};
+        const upTo=allLogs.filter(l=>l && l.day<=days[days.length-1]);
+        const before=rankOf(order(prior)), after=rankOf(order(upTo));
+        const startTotal=new Map(order(prior).map(r=>[r.name,r.total]));
+        let best=null;
+        roster.forEach(p=>{
+          if((startTotal.get(p.name)||0)<=0) return;    // no rank to climb FROM
+          const up=(before.get(p.name)||0)-(after.get(p.name)||0);
+          if(up>0 && (!best || up>best.up)) best={name:p.name, up};
+        });
+        climber=best;
+      }
+    }catch(e){ logErr('computeMondayRecap:climber', e); }
+
+    // Best individual week in the group, by days shown up — not by points, so
+    // it can't be won by logging six things in one day.
+    const daysByPlayer=new Map();
+    weekLogs.forEach(l=>{ if(!daysByPlayer.has(l.player)) daysByPlayer.set(l.player,new Set());
+                          daysByPlayer.get(l.player).add(l.day); });
+    let topName=null, topDays=0;
+    daysByPlayer.forEach((set,name)=>{ if(set.size>topDays){ topDays=set.size; topName=name; } });
+
+    return { key, monLast, sunLast, partial, windowDays:days.length,
+             workouts:weekLogs.length, people, myDays, myWorkouts:mine.length,
+             climber, topName, topDays, rosterSize:roster.length };
+  }catch(e){ logErr('computeMondayRecap', e); return null; }
+}
+
+function dismissMondayRecap(key){
+  try{ localStorage.setItem(key,'1'); }catch(e){}
+  const el=document.getElementById('mondayRecap'); if(el) el.innerHTML='';
+}
+
+function renderMondayRecap(){
+  const el=document.getElementById('mondayRecap'); if(!el) return;
+  const r=computeMondayRecap();
+  if(!r){ el.innerHTML=''; return; }
+  const fmt=d=>d.toLocaleDateString(undefined,{day:'numeric',month:'short'});
+  const lines=[];
+  lines.push(`<b>${r.workouts}</b> workout${r.workouts===1?'':'s'} from <b>${r.people}</b> of ${r.rosterSize}`);
+  if(r.topName) lines.push(`${esc(r.topName)} showed up <b>${r.topDays}</b> day${r.topDays===1?'':'s'}`);
+  if(r.climber) lines.push(`${esc(r.climber.name)} climbed <b>${r.climber.up}</b> place${r.climber.up===1?'':'s'}`);
+  // Yours last, and stated flatly. A zero week gets no scolding — the number is
+  // the feedback, and a guilt-trip on a Monday morning loses people.
+  const mineLine = r.myDays>0
+    ? `You logged <b>${r.myDays}</b> day${r.myDays===1?'':'s'}.`
+    : `You didn't log last week. New week, clean slate.`;
+  el.innerHTML=`<div class="card" style="border-left:3px solid var(--gold)">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)">Last week</div>
+      <div style="font-size:11px;color:var(--muted)">${fmt(r.monLast)} – ${fmt(r.sunLast)}</div>
+    </div>
+    <div style="margin-top:8px;font-size:14px;line-height:1.6">${lines.join(' · ')}</div>
+    <div style="margin-top:6px;font-size:14px">${mineLine}</div>
+    ${r.partial?`<div style="margin-top:6px;font-size:11px;color:var(--muted)">Counting the ${r.windowDays} day${r.windowDays===1?'':'s'} of that week inside this month.</div>`:''}
+    <button class="btn btn-surface btn-sm" style="margin-top:10px" onclick="dismissMondayRecap('${r.key}')">Got it</button>
+  </div>`;
 }
 
 // ── WEEKLY MOVER ──────────────────────────────────────────────────────────
@@ -4523,13 +5409,23 @@ function renderLB(){
   if(!season) return;
   const players=season.roster||[];
   const teams=[...new Set(players.map(p=>p.team))];
+  // SOLO / SMALL-GROUP: with one team there is no contest to stand. Hide the
+  // whole block — header included — rather than render a single card that
+  // reads "Team A · Leading · 100%" against nobody. Individual Rankings below
+  // is untouched and becomes the only board, which is the point.
+  const _solo = (typeof isSoloMode==='function' && isSoloMode()) || teams.length<=1;
+  const _tsHdr=document.getElementById('teamStandHdr'), _tsBox=document.getElementById('teamStand');
+  if(_tsHdr) _tsHdr.style.display=_solo?'none':'';
+  if(_solo){
+    if(_tsBox) _tsBox.innerHTML='';
+  }
   const tcol=t=>t==='A'?'var(--A)':t==='B'?'var(--B)':'var(--C)';
   const ts=teams.map(t=>({t,s:teamTotal(t),count:players.filter(p=>p.team===t).length})).sort((a,b)=>b.s-a.s);
   // Ranked standings cards: medal rank, team name, members, avg pts,
   // and a relative bar showing each team's score vs the leader.
   const firstS = ts[0]?.s || 1;
   const medalCols = ['#FFD700','#C0C0C0','#CD7F32'];   // gold, silver, bronze
-  document.getElementById('teamStand').innerHTML=ts.map((t,i)=>{
+  if(!_solo) document.getElementById('teamStand').innerHTML=ts.map((t,i)=>{
     const col = tcol(t.t);
     const names = players.filter(p=>p.team===t.t).map(p=>esc(p.name)).join(' · ');
     const pct = Math.max(6, Math.round((t.s/firstS)*100));
@@ -4540,7 +5436,7 @@ function renderLB(){
         <div class="tstand-top">
           <span class="tstand-name" style="color:${col}">Team ${t.t}</span>
           ${lead?'<span class="tstand-crown">Leading</span>':''}
-          <span class="tstand-pts">${t.s}<i>avg pts</i></span>
+          <span class="tstand-pts"><span data-num="ts:${t.t}">${t.s}</span><i>avg pts</i></span>
         </div>
         <div class="tstand-bar"><div class="tstand-fill" style="width:${pct}%;background:${col}"></div></div>
         <div class="tstand-meta">${t.count} member${t.count===1?'':'s'} · ${names}</div>
@@ -4556,8 +5452,13 @@ function renderLB(){
   };
   const ind=players.map(p=>({...p,sc:score(p.name)})).sort((a,b)=>b.sc.total-a.sc.total);
   const myName=me.name;
-  document.getElementById('indLb').innerHTML=ind.map((p,i)=>`
-    <div class="lbrow" style="${p.name===myName?'background:rgba(201,168,76,0.06);margin:0 -16px;padding:12px 16px;border-radius:8px':''}">
+  // FLIP: read positions BEFORE the repaint below. On the very first pass this
+  // finds only skeleton rows, which carry no data-row, so it returns an empty
+  // map and flipPlay() no-ops — the boot render is silent for free.
+  const _lbBox=document.getElementById('indLb');
+  const _lbBefore=flipCapture(_lbBox);
+  _lbBox.innerHTML=ind.map((p,i)=>`
+    <div class="lbrow" data-row="${esc(p.name)}" style="--i:${i<8?i:8};${p.name===myName?'background:rgba(201,168,76,0.06);margin:0 -16px;padding:12px 16px;border-radius:8px':''}">
       ${_rankBadge(i)}
       <div style="width:34px;height:34px;border-radius:50%;background:${p.team==='A'?'var(--Al)':p.team==='B'?'var(--Bl)':'var(--Cl)'};border:1.5px solid ${tcol(p.team)};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:${tcol(p.team)};flex-shrink:0">${esc(p.name[0])}</div>
       <div class="lbinfo">
@@ -4565,10 +5466,13 @@ function renderLB(){
         <div class="lbmeta" style="color:var(--muted)">${p.sc.wo} workouts · ${p.sc.streak}${flameIco('flk-s')}</div>
       </div>
       <div style="text-align:right">
-        <div style="font-size:18px;font-weight:800;color:var(--gold)">${p.sc.total}</div>
+        <div style="font-size:18px;font-weight:800;color:var(--gold)" data-num="lb:${esc(p.name)}">${p.sc.total}</div>
         <div style="font-size:10px;color:var(--muted)">pts</div>
       </div>
     </div>`).join('');
+  // Play immediately after the repaint, in the same synchronous block — no
+  // scroll can happen in between, so the captured offsets stay valid.
+  flipPlay(_lbBox, _lbBefore);
 
   const my=score(me.name);
   const pl=(season.roster||[]).find(p=>p.name===me.name)||me;
@@ -4577,7 +5481,7 @@ function renderLB(){
     ${[
       ['Base points',my.base,`${my.wo} workouts × 5 — Boss Week doubles days inside its window`],
       ['Perfect week',my.wb,'+10 per any 7 consecutive days'],
-      ['Team streak',my.tb,'Cumulative +1/+2/+3 (proportional threshold)'],
+      [isSoloMode()?'Group streak':'Team streak',my.tb,'Cumulative +1/+2/+3 (proportional threshold)'],
       ['Role bonus',my.rb,pl.role+' — applied on last day'],
       ['30-day bonus',my.b30,'All days logged'],
       ...(my.dayBonuses?[['Day bonuses',my.dayBonuses,'Freaky Fridays / Monday Motivation']]:[] ),
@@ -4592,8 +5496,12 @@ function renderLB(){
       </div>`).join('')}
     <div class="row" style="padding:14px 0 0;margin-top:6px;border-top:2px solid var(--border)">
       <div style="font-size:15px;font-weight:700">Total</div>
-      <div style="font-size:24px;font-weight:800;color:var(--gold)">${my.total}</div>
+      <div style="font-size:24px;font-weight:800;color:var(--gold)" data-num="me:total">${my.total}</div>
     </div>`;
+
+  // Runs AFTER both innerHTML writes, so every tagged figure on the board is
+  // measured in the same pass. Anything unchanged is left alone.
+  tickNumbers(document.getElementById('page-lb'));
 }
 
 // ── FEED ──────────────────────────────────────────────────────────────────
@@ -4639,15 +5547,18 @@ function renderFeed(){
       <div style="font-size:11px;color:var(--muted)">Assignments were balanced from last season's final scores.</div></div>
     </div>`;
   }
-  let statsHTML=bannerHTML+`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+  // SOLO: one team means "Leading today" is a constant. Drop the tile and let
+  // "Logged today" take the full width rather than sit orphaned in a 2-col grid.
+  const _feedSolo = (typeof isSoloMode==='function' && isSoloMode());
+  let statsHTML=bannerHTML+`<div style="display:grid;grid-template-columns:${_feedSolo?'1fr':'1fr 1fr'};gap:8px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
     <div style="background:var(--green-l);border-radius:10px;padding:12px;text-align:center">
       <div style="font-size:26px;font-weight:900;color:var(--green)">${todayCount}<span style="font-size:13px;font-weight:500;color:var(--green)">/${total}</span></div>
       <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Logged today</div>
     </div>
-    <div style="background:${topTeam?tbg(topTeam):'var(--surface)'};border-radius:10px;padding:12px;text-align:center">
+    ${_feedSolo?'':`<div style="background:${topTeam?tbg(topTeam):'var(--surface)'};border-radius:10px;padding:12px;text-align:center">
       <div style="font-size:26px;font-weight:900;color:${topTeam?tcol(topTeam):'var(--muted)'}">${topTeam?'Team '+topTeam:'—'}</div>
       <div style="font-size:10px;font-weight:700;color:${topTeam?tcol(topTeam):'var(--muted)'};text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Leading today</div>
-    </div>
+    </div>`}
     ${topStreakers.length>0?`<div style="background:var(--gold-l);border-radius:10px;padding:12px;text-align:center;grid-column:1/-1">
       <div style="font-size:16px;font-weight:800;color:var(--orange)">${(function(){const d=topStreak+(topStreak===1?' day ':' days ')+flameIco('flk-m');return topStreakers.length<=3?topStreakers.map(p=>p.name).join(' · ')+' · '+d:'Multiple players · '+d;})()}</div>
       <div style="font-size:10px;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">${topStreakers.length<=3?'Longest active streak':topStreakers.length+' players tied — check the board'}</div>
@@ -4659,7 +5570,7 @@ function renderFeed(){
   // prominent centre-left with their live streak beside it, and the workout's
   // category glyph on the RIGHT as a solid FILLED icon. No emojis anywhere.
   // Timestamps, reactions, void + flag affordances and day labels unchanged.
-  document.getElementById('feedList').innerHTML=statsHTML+sorted.slice(0,60).map(l=>{
+  document.getElementById('feedList').innerHTML=statsHTML+sorted.slice(0,60).map((l,i)=>{
     const ws=Array.isArray(l.workouts)?l.workouts:(l.workout?[l.workout]:[]);
     const w=ws.join(', ');
     const ts=l.timestamp?.seconds?new Date(l.timestamp.seconds*1000):null;
@@ -4690,7 +5601,7 @@ function renderFeed(){
     const primary=ws[0]||'';
     const ccol=mirColOf(primary);
     const fico=mirIconOf(primary);
-    return `<div class="fi t${ct}">
+    return `<div class="fi t${ct}" style="--i:${i<8?i:8}">
       <div class="fi-main">
         <div class="fi-name" style="color:${tcol(ct)}">${esc(l.player)}${st>0?`<span class="fi-streak">${mirBico('g-flame')}${st}</span>`:''}${flagCount>=2?'<span class="fi-flagged">flagged</span>':''}</div>
         <div class="fi-w">${esc(w)}</div>
@@ -4810,16 +5721,20 @@ async function resolveFlag(logId,action){
 // ── ADMIN ─────────────────────────────────────────────────────────────────
 function renderAdminRoles(){
   const players=season.roster||[];
-  const numTeams=season.numTeams===2?2:3;
-  const teamOpts=numTeams===2?['A','B']:['A','B','C'];
+  const teamOpts=teamLettersOf(season);
   const rolesOn=season.rolesEnabled!==false;
+  // SOLO: a one-option team picker is noise. The <select> STAYS IN THE DOM
+  // (display:none) because saveRoles() reads it by id — removing it outright
+  // would make every Save All Changes throw. Only the grid track goes.
+  const solo=(typeof isSoloMode==='function' && isSoloMode());
+  const teamCol=solo?'':' 70px';
   // S3 §4.1: Admin checkbox + Reset PIN button, independent of whether the
   // Captain/VC roles feature is on for this season.
-  const cols=rolesOn?'1fr 70px 120px 46px 70px':'1fr 70px 46px 70px';
+  const cols=rolesOn?`1fr${teamCol} 120px 46px 70px 70px`:`1fr${teamCol} 46px 70px 70px`;
   document.getElementById('adminRoles').innerHTML=players.map(p=>`
     <div style="display:grid;grid-template-columns:${cols};gap:6px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
       <span style="font-size:13px;font-weight:600">${esc(p.name)}</span>
-      <select id="team_${esc(p.name)}" style="padding:6px;font-size:12px;margin-bottom:0">
+      <select id="team_${esc(p.name)}" style="padding:6px;font-size:12px;margin-bottom:0${solo?';display:none':''}">
         ${teamOpts.map(t=>`<option value="${t}"${p.team===t?' selected':''}>Team ${t}</option>`).join('')}
       </select>
       ${rolesOn?`<select id="role_${esc(p.name)}" style="padding:6px;font-size:12px;margin-bottom:0">
@@ -4827,6 +5742,7 @@ function renderAdminRoles(){
       </select>`:''}
       <input type="checkbox" id="admin_${esc(p.name)}" title="Admin" style="width:auto;margin:0;justify-self:center" ${p.isAdmin?'checked':''}>
       <button class="btn btn-surface btn-sm" style="margin:0;padding:6px 4px;font-size:11px" onclick="resetPlayerPin('${escForInlineJsAttr(p.name)}')">Reset PIN</button>
+      <button class="btn btn-surface btn-sm" style="margin:0;padding:6px 4px;font-size:11px" onclick="renamePlayer('${escForInlineJsAttr(p.name)}')">Rename</button>
     </div>`).join('');
 }
 
@@ -4889,6 +5805,93 @@ async function saveRoles(){
   } catch(e){
     if(e.message==='LAST_ADMIN'){ toast('A group must have at least one admin — promote someone else before removing the last one.','error'); }
     else { logErr('saveRoles', e); toast('Save failed — check connection: '+e.message,'error'); }
+  }
+}
+
+// ── PLAYER RENAME ─────────────────────────────────────────────────────────
+// Until now there was NO rename anywhere in the app, so every mismatch meant
+// hand-editing Firestore. It has happened twice (Rishil in July, Riya on 6 Aug),
+// and each time the person silently scored zero until a human noticed.
+//
+// THE DIRECTION MATTERS AND IS NOT SYMMETRIC. score() joins roster -> logs by
+// exact name string, and log `player` is FROZEN by the rules (updates are
+// restricted to hasOnly(['voided','voidedBy','voidedAt'])), so the app can never
+// rewrite it. Renaming the ROSTER to match existing logs re-attaches them.
+// Renaming AWAY from the logs orphans the whole month. The dialog says which
+// way it is going and how many current-season logs are at stake.
+//
+// It sweeps every group the person belongs to, because a name can differ per
+// group and only this group's roster is being changed — the others keep theirs.
+async function renamePlayer(oldName){
+  const raw = prompt(`Rename "${oldName}" to what?\n\nUse the EXACT spelling their workouts are logged under — the app matches logs to people by name.`, oldName);
+  if(raw===null) return;
+  const newName = String(raw).trim().replace(/\s+/g,' ');
+  if(!newName || newName===oldName) return;
+  if(newName.length>24){ toast('Names are limited to 24 characters.','error'); return; }
+  if((season.roster||[]).some(p=>p.name.toLowerCase()===newName.toLowerCase() && p.name!==oldName)){
+    toast(`"${newName}" is already taken in this group.`,'error'); return;
+  }
+  // How many of THIS season's logs currently match each spelling? This is the
+  // number that tells the admin whether they are fixing or breaking scoring.
+  let oldLogs=0, newLogs=0;
+  try{
+    const snap = await db.collection('logs')
+      .where('groupCode','==',groupCode).where('month','==',season.month).where('year','==',season.year).get();
+    snap.forEach(d=>{ const p=d.data(); if(p.voided) return;
+      if(p.player===oldName) oldLogs++; else if(p.player===newName) newLogs++; });
+  }catch(e){ logErr('renamePlayer:count', e); }
+
+  const warn = newLogs>0
+    ? `\n\n✅ ${newLogs} log(s) this month are already under "${newName}" and will START counting.`
+    : (oldLogs>0
+        ? `\n\n⚠️ ${oldLogs} log(s) this month are under "${oldName}". Log names cannot be changed, so those will STOP counting until they log again under the new name.`
+        : '');
+  if(!confirm(`Rename "${oldName}" to "${newName}" in this group?${warn}`)) return;
+
+  const gRef = db.collection('groups').doc(groupCode);
+  const sRef = gRef.collection('seasons').doc(seasonId);
+  try{
+    let written=null, userId=null;
+    await db.runTransaction(async tx=>{
+      const sSnap=await tx.get(sRef); if(!sSnap.exists) throw new Error('SEASON_MISSING');
+      const gSnap=await tx.get(gRef);
+      const roster=sSnap.data().roster||[];
+      const entry=roster.find(p=>p.name===oldName);
+      if(!entry) throw new Error('NO_RECORD');
+      entry.name=newName;
+      userId=entry.userId||null;
+      tx.update(sRef,{roster});
+      // groups.players is the names-only mirror; leaving it stale makes the
+      // super-admin player count and the picker disagree with the roster.
+      const players=(gSnap.exists && gSnap.data().players)||[];
+      let touched=false;
+      players.forEach(p=>{ if(p && typeof p==='object' && p.name===oldName){ p.name=newName; touched=true; } });
+      if(touched) tx.update(gRef,{players});
+      written=roster;
+    });
+    // The account's display name follows only when it still matched the old
+    // spelling — a per-group alias must not overwrite the canonical account name.
+    if(userId){
+      try{
+        const uRef=db.collection('users').doc(userId);
+        const u=await uRef.get();
+        if(u.exists && String(u.data().name||'').toLowerCase()===oldName.toLowerCase()){
+          await uRef.update({ name:newName, nameLower:newName.toLowerCase() });
+        }
+      }catch(e){ logErr('renamePlayer:userDoc', e); }
+    }
+    if(written){
+      season.roster=written;
+      const fresh=written.find(p=>p.name===newName);
+      if(fresh && me && (me.name===oldName || (me.userId && me.userId===fresh.userId))){
+        me=fresh; upsertSession(groupCode, me, groupData?.name);
+      }
+    }
+    renderAdminRoles(); refresh();
+    toast(`Renamed to ${newName}.`,'success');
+  }catch(e){
+    logErr('renamePlayer', e);
+    toast(e.message==='NO_RECORD' ? 'That player is no longer on the roster.' : 'Rename failed — check connection.','error');
   }
 }
 
@@ -4993,7 +5996,10 @@ function renderTwistToggles(){
   const WINDOW=new Set(['boss_week','underdog_week']);
   const DAY1=new Set(['freaky_fridays','monday_motivation']);
   const pick = t => WINDOW.has(t.id)?renderWindowRow(t):DAY1.has(t.id)?renderDay1Row(t):renderRow(t);
-  const standard = TWIST_LIBRARY.filter(t=>t.id!=='double_or_nothing');
+  // stakes_mode is "losing team covers next month" — unplayable when there is
+  // only one team, so it is not offered rather than offered and broken.
+  const standard = TWIST_LIBRARY.filter(t=>t.id!=='double_or_nothing')
+    .filter(t=>!(t.id==='stakes_mode' && typeof isSoloMode==='function' && isSoloMode()));
   const highStakes = TWIST_LIBRARY.find(t=>t.id==='double_or_nothing');
   let html = standard.map(pick).join('');
   if(highStakes){
@@ -5135,8 +6141,7 @@ async function fetchPrevSnapshot(){
 // median rank before dealing. Snake order: A,B,B,A (2 teams) / A,B,C,C,B,A (3).
 function computeSnakeDraft(standings){
   const roster = season.roster || [];
-  const numTeams = season.numTeams === 2 ? 2 : 3;
-  const teamLetters = numTeams === 2 ? ['A','B'] : ['A','B','C'];
+  const teamLetters = teamLettersOf(season);
   const totalByName = {};
   (standings||[]).forEach(s=>{ totalByName[String(s.name).trim().toLowerCase()] = Number(s.total)||0; });
 
@@ -5171,6 +6176,13 @@ async function maybeShowRebalanceCard(){
   if(!host) return;
   host.innerHTML = '';
   if(!season || !seasonId) return;
+  // SOLO: there is nothing to balance between. Hide the prompt AND the standing
+  // "⚖️ Auto-balance teams" button — a snake draft across one team is a no-op
+  // that only invites confusion.
+  const _soloRb = (typeof isSoloMode==='function' && isSoloMode());
+  const _rbBtn = document.getElementById('rebalanceBtn');
+  if(_rbBtn) _rbBtn.style.display = _soloRb ? 'none' : '';
+  if(_soloRb) return;
   if(season.rebalancedAt || season.rebalanceDismissed) return;    // already handled this season
   const startedMs = season.startedAt?.toMillis ? season.startedAt.toMillis() : ((season.startedAt?.seconds||0)*1000);
   if(!startedMs) return;                                          // legacy season w/o startedAt — permanent button still works
@@ -5474,7 +6486,7 @@ async function saveEditGroup(){
   const capTarget=parseInt(document.getElementById('editCapTarget').value)||16;
   const vcTarget=parseInt(document.getElementById('editVCTarget').value)||20;
   const minWorkouts=parseInt(document.getElementById('editMinWO').value)||12;
-  const numTeams=Math.min(3,Math.max(2,parseInt(document.getElementById('editNumTeams').value)||3));
+  const numTeams=Math.min(3,Math.max(1,parseInt(document.getElementById('editNumTeams').value)||3));
   const thresholdPct=Math.min(100,Math.max(30,parseInt(document.getElementById('editThreshold').value)||60));
   // null (not 0, not absent) is the explicit "off" value — every km surface tests
   // Number(kmTarget)>0, and writing null lets an admin switch the feature back off
@@ -5486,16 +6498,45 @@ async function saveEditGroup(){
   const isDemo=document.getElementById('editDemo').checked;
 
   // ── Guard: reducing team count while players sit on a vanishing team ──
-  if(numTeams===2){
-    const orphans=(window._editRoster||[]).filter(p=>p.team==='C').map(p=>p.name);
-    if(orphans.length>0){
-      const ok=confirm(`⚠️ Reducing to 2 teams, but these players are on Team C:\n\n${orphans.join(', ')}\n\nThey will stay on Team C in the data (not lost), but the app will only offer Teams A and B. You'll need to reassign them via that group's Admin → Team & Role Assignment.\n\nProceed anyway?`);
+  // Generalised from the old numTeams===2-only check. Dropping to 1 strands
+  // everyone on B AND C, and that case cannot merely warn: the scoring engine
+  // derives teams from the roster's `team` values, never from numTeams, so a
+  // "1 team" season with leftover B/C players would keep scoring them as
+  // SEPARATE teams — each with its own ceil(n x threshold) — while the UI
+  // insisted there was one group. So at 1 team we migrate the roster instead.
+  const _validLetters = teamLettersOf({numTeams});
+  const _orphans = (window._editRoster||[]).filter(p=>p.team && _validLetters.indexOf(p.team)<0);
+  let _migrateToA = false;
+  if(_orphans.length>0){
+    const names=_orphans.map(p=>p.name).join(', ');
+    if(numTeams===1){
+      const ok=confirm(`Switching to a single group team.\n\n${_orphans.length} player(s) are on Team B or C:\n\n${names}\n\nThey will be moved to Team A so the whole group shares one streak. Nothing else changes — points, logs and history are untouched.\n\nProceed?`);
+      if(!ok){ status.textContent='Cancelled — no changes saved.'; return; }
+      _migrateToA = true;
+    } else {
+      const ok=confirm(`⚠️ Reducing to ${numTeams} teams, but these players are on a team that will no longer be offered:\n\n${names}\n\nThey stay on that team in the data (not lost), but the app will only offer ${_validLetters.join(' and ')}. You'll need to reassign them via that group's Admin → Team & Role Assignment.\n\nProceed anyway?`);
       if(!ok){ status.textContent='Cancelled — no changes saved.'; return; }
     }
   }
 
   status.textContent='Saving…';
   try{
+    // Roster migration to Team A runs in its own transaction FIRST, so a failure
+    // here leaves the season on its old numTeams rather than switching the count
+    // and stranding the players the guard just promised to move.
+    if(_migrateToA){
+      const _sRef = db.collection('groups').doc(code).collection('seasons').doc(sid);
+      await db.runTransaction(async tx=>{
+        const snap = await tx.get(_sRef);
+        if(!snap.exists) throw new Error('SEASON_MISSING');
+        const roster = (snap.data().roster||[]).map(p=>Object.assign({}, p, {team:'A'}));
+        tx.update(_sRef, {roster});
+      });
+      if(window._editRoster) window._editRoster.forEach(p=>{ p.team='A'; });
+      if(window.season && window.seasonId===sid && window.groupCode===code && Array.isArray(window.season.roster)){
+        window.season.roster.forEach(p=>{ p.team='A'; });
+      }
+    }
     await Promise.all([
       db.collection('groups').doc(code).update({ name: newGroupName, demo: isDemo }),
       db.collection('groups').doc(code).collection('seasons').doc(sid).update({
@@ -5592,7 +6633,15 @@ async function writeSeasonSnapshot(code){
   // ── Badges (§2.5: no shared #1 — a genuine tie at the top awards nobody) ──
   const top = finalStandings[0], secondTotal = finalStandings[1]?.total;
   const seasonWinnerName = (top && top.total>0 && (secondTotal===undefined || top.total>secondTotal)) ? top.name : null;
-  const teamTop = teamStandings[0], teamSecondAvg = teamStandings[1]?.avg;
+  // A one-team season has no team contest, so nobody can win it. Without this
+  // guard `teamStandings[1]` is undefined, `teamSecondAvg===undefined` is true,
+  // and the expression below declares Team A the winner — handing a PERMANENT
+  // 🏆 Team Winner badge to every single member, written into their user doc
+  // and counted in stats.badgeCounts forever. Gated on the standings themselves
+  // rather than on numTeams so it also protects any season whose roster
+  // happened to collapse to one team.
+  const teamTop = teamStandings.length > 1 ? teamStandings[0] : null;
+  const teamSecondAvg = teamStandings[1]?.avg;
   const teamWinner = (teamTop && (teamSecondAvg===undefined || teamTop.avg>teamSecondAvg)) ? teamTop.team : null;
 
   const badgesAwarded = [];
@@ -5710,6 +6759,13 @@ async function performRollover(code){
       capTarget: cur2.capTarget ?? 16, vcTarget: cur2.vcTarget ?? 20, minWorkouts: cur2.minWorkouts ?? 12,
       numTeams: cur2.numTeams ?? 3, teamStreakThreshold: cur2.teamStreakThreshold ?? 0.6,
       rolesEnabled: cur2.rolesEnabled !== false,
+      // kmTarget is a FEATURE TOGGLE, not just a number: scoringEngine treats
+      // "unset" as "the distance goal does not exist for this season". Omitting
+      // it here silently switched the whole feature off at every month boundary
+      // with no UI signal to the admin. Carried forward like every other target.
+      // (foundryGoal is deliberately NOT carried — it's a manual override of an
+      // auto-computed goal, and a stale number is worse than re-computing.)
+      kmTarget: cur2.kmTarget ?? null,
       roster: newRoster, status:'active',
       startedAt: firebase.firestore.FieldValue.serverTimestamp(), endedAt: null
     });
@@ -6327,7 +7383,7 @@ async function createGroup(){
   const capTarget=parseInt(document.getElementById('newGroupCapTarget').value);
   const vcTarget=parseInt(document.getElementById('newGroupVCTarget').value);
   const minWorkouts=parseInt(document.getElementById('newGroupMinWO').value);
-  const numTeams=Math.min(3, Math.max(2, parseInt(document.getElementById('newGroupNumTeams').value)||3));
+  const numTeams=Math.min(3, Math.max(1, parseInt(document.getElementById('newGroupNumTeams').value)||3));
   const thresholdPct=Math.min(100, Math.max(30, parseInt(document.getElementById('newGroupThreshold').value)||60));
   const rolesEnabled=document.getElementById('newGroupRoles').checked;
   const isDemo=document.getElementById('newGroupDemo').checked;
@@ -6364,7 +7420,7 @@ async function createGroup(){
   batch.set(seasonRef, {
     month, year, days,
     capTarget, vcTarget, minWorkouts,
-    numTeams,                          // 2 or 3 — how many teams this season uses
+    numTeams,                          // 1, 2 or 3 (1 = whole group is one team)
     teamStreakThreshold: thresholdPct/100,  // fraction (0.6 = 60%)
     rolesEnabled,                      // Captain/VC on or off for this season
     roster: [],             // populated as players register
@@ -6490,7 +7546,8 @@ async function loadGlobal(){
     renderGlobalFromCache(globalDataCache);
     return;
   }
-  actEl.innerHTML=grpEl.innerHTML=ptsEl.innerHTML='<div class="tmuted">Loading…</div>';
+  // Reached only on a real fetch — the cache path above has already returned.
+  actEl.innerHTML=skRows(3); grpEl.innerHTML=skRows(4); ptsEl.innerHTML=skRows(5);
   try{
     const gSnap=await db.collection('groups').get();                       // G reads
     const groups=gSnap.docs.map(d=>({code:d.id,...d.data()}));
@@ -6526,22 +7583,46 @@ function renderGlobalFromCache({groups,todayByGroup}){
   // globalStats (only when it matches the group's CURRENT season, so a
   // just-rolled-over group doesn't show last season's numbers until recompute).
   const groupAgg=[];
-  const playerEntries=[];
+  let playerEntries=[];
   for(const g of groups){
     if(g.demo===true) continue;   // demo groups: never on the Global boards
     const gs=g.globalStats; if(!gs || gs.seasonId!==g.currentSeasonId || !gs.count) continue;
     groupAgg.push({name:g.name,total:gs.total,count:gs.count,avg:gs.avg});
-    (gs.players||[]).forEach(p=>{ if(p&&p.name!=null) playerEntries.push({name:p.name,group:g.name,points:p.points}); });
+    (gs.players||[]).forEach(p=>{ if(p&&p.name!=null) playerEntries.push({name:p.name,group:g.name,code:g.code,points:p.points,userId:p.userId||null}); });
   }
   const grpRanked=groupAgg.sort((a,b)=>b.avg-a.avg).slice(0,5);
   grpEl.innerHTML=grpRanked.length===0
     ?'<div class="tmuted">No groups yet.</div>'
     :grpRanked.map((g,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(g.name)}</div><div class="lbmeta">${g.count} players · ${g.total} total pts</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${g.avg}</div><div style="font-size:10px;color:var(--muted)">avg/player</div></div></div>`).join('');
+  // ── ONE ROW PER PERSON, NOT PER MEMBERSHIP ──────────────────────────────
+  // This board used to push one entry per (person, group), so anyone in three
+  // groups occupied three of the five slots and competed against themselves —
+  // Nirag sat at ranks 2, 4 and 6 with 28/25/25, pushing real rivals down the
+  // board for no reason. Only a person's BEST group counts now.
+  //
+  // Keyed on userId, NOT name. Name would be wrong in a way that matters: two
+  // pairs of real players across these groups share a first name and are
+  // different people, and merging them would silently delete someone from the
+  // board. When userId is absent (older globalStats docs, pre-userId roster
+  // rows) the key stays group-scoped, so those entries never merge with
+  // anything — the safe direction, at the cost of a duplicate until the writer
+  // next refreshes that group.
+  const _bestByPerson=new Map();
+  playerEntries.forEach(e=>{
+    const k = e.userId ? ('u:'+e.userId) : ('n:'+e.code+'|'+String(e.name).toLowerCase());
+    const prev=_bestByPerson.get(k);
+    if(!prev){ _bestByPerson.set(k, Object.assign({groups:1}, e)); }
+    else {
+      prev.groups++;
+      if(e.points>prev.points){ prev.points=e.points; prev.group=e.group; prev.name=e.name; }
+    }
+  });
+  playerEntries=[..._bestByPerson.values()];
   playerEntries.sort((a,b)=>b.points-a.points);
   const top=playerEntries.slice(0,5);
   ptsEl.innerHTML=top.length===0
     ?'<div class="tmuted">No one has opted in yet. Turn on "Show me on the global leaderboard" on your Home screen to appear here.</div>'
-    :top.map((e,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(e.name)}</div><div class="lbmeta">${esc(e.group)}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${e.points}</div><div style="font-size:10px;color:var(--muted)">pts</div></div></div>`).join('');
+    :top.map((e,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(e.name)}</div><div class="lbmeta">${esc(e.group)}${e.groups>1?` · best of ${e.groups}`:''}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${e.points}</div><div style="font-size:10px;color:var(--muted)">pts</div></div></div>`).join('');
 }
 
 // R3 BACKFILL — one-time seed of the denormalized rollups from live data using
@@ -6580,7 +7661,7 @@ async function backfillGlobalStats(){
     const roster=sData.roster||[];
     const ctx={ season:sData, groupCode:g.code, logs:logs.filter(l=>l.groupCode===g.code&&l.month===sData.month&&l.year===sData.year), twists, twistWindows:(twistWindows||[]).filter(w=>w.month===sData.month&&w.year===sData.year), bonuses:bonuses.filter(b=>b.groupCode===g.code&&b.month===sData.month&&b.year===sData.year) };
     let total=0; const players=[];
-    roster.forEach(p=>{ const t=score(p.name,ctx).total; total+=t; if(p.globalConsent===true) players.push({name:p.name,points:t}); });
+    roster.forEach(p=>{ const t=score(p.name,ctx).total; total+=t; if(p.globalConsent===true) players.push({name:p.name,points:t,userId:p.userId||null}); });
     const count=roster.length; const avg=count?Math.round(total/count):0;
     await db.collection('groups').doc(g.code).set({ globalStats:{ seasonId:sid, total, avg, count, players, computedAt:firebase.firestore.FieldValue.serverTimestamp() } },{merge:true});
     wrote++;
@@ -6998,6 +8079,7 @@ function updateTabPill(t){
   pill.style.left=(tabRect.left-tabsRect.left)+'px';
   pill.style.width=tabRect.width+'px';
 }
+let _freshTimer=null;   // clears .page.fresh — see the ARRIVAL block in main.css
 async function showTab(t){
   // PASS-2 FIX 8 — legacy 'log' route: the Log tab no longer exists, so any
   // surviving caller (deep link, post-onboarding redirect, old bookmark)
@@ -7028,7 +8110,21 @@ async function showTab(t){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
   const pg=document.getElementById(`page-${t}`);
-  if(pg) pg.classList.add('active');
+  if(pg){
+    pg.classList.add('active');
+    // Rows stagger in on ARRIVAL only — see .page.fresh in main.css. Cleared on
+    // a timer rather than animationend, because the last row to finish isn't
+    // knowable up front and a missed event would leave the class stuck on,
+    // re-animating the list on every snapshot for the rest of the session.
+    // ONLY the two pages that actually have staggered rows. .fresh also swaps
+    // that page's entrance to a plain fade so the rows carry the movement, and
+    // handing that to Home or Admin would strip their pageIn for nothing.
+    if(t==='lb' || t==='feed'){
+      pg.classList.add('fresh');
+      clearTimeout(_freshTimer);
+      _freshTimer=setTimeout(()=>pg.classList.remove('fresh'), 1000);
+    }
+  }
   document.querySelectorAll('.tab')[TABS.indexOf(t)]?.classList.add('active');
   updateTabPill(t);
   window.scrollTo(0,0);
@@ -7370,7 +8466,11 @@ if('serviceWorker' in navigator){
     var myEntry = roster.filter(function(p){ return p.name===me.name; })[0] || null;
     var myTeam = myEntry ? myEntry.team : null;
     var myTeamResult = null;
-    if(myTeam && teamScores.length){
+    // Same one-team guard as the badge writer: with a single team `idx` is
+    // always 0, so every member's recap would announce "Your team won!" and
+    // print the TEAM A TOOK THE SEASON tile. A one-team season has no team
+    // result at all — leaving this null makes the whole block render nothing.
+    if(myTeam && teamScores.length > 1){
       var idx = -1;
       for(var ti=0; ti<teamScores.length; ti++){ if(teamScores[ti].team===myTeam){ idx=ti; break; } }
       if(idx>=0){

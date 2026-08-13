@@ -167,6 +167,80 @@ window.seasonIdOf = function(month, year){
   return `${year}-${String(month).padStart(2,'0')}`;
 };
 
+// ── FEATURE FLAGS ─────────────────────────────────────────────────────────
+// AUTH PHASE 1. Stays FALSE until two Firebase-console steps are done, neither
+// of which can be automated:
+//   1. Blaze enabled on the project (needed later for claimIdentity(); free)
+//   2. Authentication -> Sign-in method -> Google ENABLED + OAuth client created
+// Flipping this to true is the ONLY code change needed to switch the feature on,
+// and flipping it back to false is a complete, instant rollback — every Google
+// surface is gated on it and the anonymous + PIN paths are untouched underneath.
+// Turn it on for STAGING first; prod stays false until warm-user QA passes.
+window.FEATURE_GOOGLE_AUTH = false;
+
+// PUSH NOTIFICATIONS. Needs one console step that cannot be automated:
+//   Firebase console -> Project settings -> Cloud Messaging ->
+//   Web Push certificates -> Generate key pair
+// Paste the key below and flip the flag. Without it getToken() throws, so the
+// flag is a real gate, not decoration. Staging first; prod after warm QA.
+window.FEATURE_PUSH = false;
+window.FCM_VAPID_KEY = '';   // <-- paste the Web Push certificate key pair here
+
+// ── THE HALL OF THE DEPARTED ──────────────────────────────────────────────
+// Locked decision, 25 Jul 2026 (AUTH_DESIGN_FINAL Q4). A deleted player is not
+// erased from a group's history — their league record is the GROUP's shared
+// record, not only theirs. They are replaced by a punny departure name, taken
+// in order, skipping any already used in that group. Bank exhausted -> "Gone
+// Player #N".
+//
+// It also happens to be the right engineering answer. A single generic
+// "Deleted user" would collide the moment two people left the same group, and
+// this app keys identity on the name string in a dozen places — two identical
+// roster names is undefined behaviour, not a cosmetic problem.
+window.DEPARTED_NAMES = [
+  'Sheera Naway', 'Simran Bhaag', 'Ranaway Rana', 'Gayab Singh',
+  'Nikhil Gayaa', 'Farrar Khan',  'Rafu Chakkar', 'Bhaagi Mehta',
+  'Gul Hogayaa',  'U-Turn Uday',  'Tata B. Bai',  'Chhod K. Gaya'
+];
+
+// Pick the next unused departure name for a roster. Deterministic and
+// collision-free within a group, which is what the name-keyed lookups need.
+window.pickDepartedName = function(roster){
+  const taken = new Set((roster||[]).map(p => p && p.name).filter(Boolean));
+  for(const n of window.DEPARTED_NAMES){ if(!taken.has(n)) return n; }
+  let i = 1;
+  while(taken.has('Gone Player #' + i)) i++;
+  return 'Gone Player #' + i;
+};
+
+// ── SOLO / SMALL-GROUP MODE ───────────────────────────────────────────────
+// numTeams === 1 means "the team is the whole group": no team standings, no
+// rivalry UI, one shared GROUP streak, one podium. It is the single change that
+// serves every group below 6 AND solo (a group of 1).
+//
+// Why groups under 6 needed this: the team streak threshold is
+// ceil(teamSize x teamStreakThreshold). Split 4 people into 2 teams at the 0.6
+// default and each team of 2 needs BOTH people EVERY day — zero slack, so the
+// streak never starts and those groups never see the mechanic Forge is built
+// around. They were not being fussy; 2v2 is mechanically impossible.
+//
+// This is a DATA gate, not a build flag: it reads the season's own numTeams, so
+// every existing 2- and 3-team group is untouched.
+window.isSoloMode = function(){
+  return Number(window.season && window.season.numTeams) === 1;
+};
+
+// The team letters a season actually uses. Replaces three separate hand-rolled
+// `season.numTeams === 2 ? 2 : 3` coercions, each of which silently turned a
+// numTeams of 1 into 3 — which is why writing numTeams:1 to Firestore used to
+// do nothing at all. Unknown/absent values still fall back to 3, as before.
+window.teamLettersOf = function(season){
+  const n = Number(season && season.numTeams);
+  if(n === 1) return ['A'];
+  if(n === 2) return ['A','B'];
+  return ['A','B','C'];
+};
+
 // Look up a player's team+role from the current season's roster.
 // Returns null if player not on roster.
 window.rosterEntry = function(name){
