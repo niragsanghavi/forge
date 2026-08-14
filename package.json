@@ -1,0 +1,16 @@
+{
+  "name": "forge-ios",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Native iOS shell for Forge. The web app is BUNDLED, not remote-loaded — see capacitor.config.json for why.",
+  "scripts": {
+    "build:www": "node scripts/build-www.mjs",
+    "sync": "npm run build:www && npx cap sync ios",
+    "open": "npx cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/ios": "^8.5.0"
+  }
+}
