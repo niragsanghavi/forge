@@ -28,6 +28,8 @@
 	<true/>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Forge reads workouts you've already recorded (for example on Apple Watch) so you can log them to your group with one tap. Your health data never leaves this phone.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Forge only reads workouts you have already recorded. It never adds to, changes or deletes anything in Apple Health.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
