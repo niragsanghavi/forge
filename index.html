@@ -2,6 +2,35 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<!-- ══ HTTPS GUARD — MUST STAY THE FIRST SCRIPT ON THE PAGE ══════════════
+     Web Crypto (crypto.subtle) exists ONLY in a secure context. Served over
+     plain http it is undefined, so sha256hex() throws and EVERY PIN operation
+     dies inside a generic catch that tells the user "Save failed — check
+     connection." — a message that sends them to their router instead of here.
+
+     This was not hypothetical: 27 logged failures on prod between 17 Jul and
+     17 Aug 2026, every single one from http://goforge.in and none from https.
+     Ten people were blocked from ever registering; five could not set a PIN;
+     ten logins silently degraded to the legacy plaintext-PIN path.
+
+     Why it hid for a month: staging is served from github.io, which browsers
+     force to https automatically. Only the custom domain could ever be
+     reached over http, so no amount of staging testing could reveal it.
+
+     The REAL fix is GitHub Pages → Settings → Pages → "Enforce HTTPS" (a 301
+     at the edge, which also protects assets and old saved links). This is the
+     belt-and-braces guard for any window where that is off — it costs one
+     comparison, and replace() rather than assign() keeps the back button from
+     bouncing between the two protocols. localhost is exempt so local dev over
+     http keeps working (and is a secure context anyway, so crypto works). -->
+<script>
+(function(){
+  var h = location.hostname;
+  if(location.protocol === 'http:' && h !== 'localhost' && h !== '127.0.0.1' && h !== '[::1]'){
+    location.replace('https://' + location.host + location.pathname + location.search + location.hash);
+  }
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <title>Forge</title>
 <link rel="stylesheet" href="src/style/main.css">
@@ -169,11 +198,32 @@
   <div class="ob-tag">Forged by the group.</div>
   <div class="ob-card">
     <div class="ob-step active" id="ob-s1">
+      <!-- Returning-user door. Hidden unless FEATURE_GOOGLE_AUTH is on (see
+           renderGoogleLoginDoor) — the whole Google surface stays invisible
+           until the console work is done. Above the code path on purpose:
+           someone who already has an account should never have to hunt for
+           their group code on a new phone (AUTH_DESIGN_FINAL Phase 1). -->
+      <div id="googleLoginDoor" style="display:none">
+        <button class="btn btn-surface" style="margin:0 0 10px;width:100%" onclick="loginWithGoogle()">Continue with Google</button>
+        <div style="display:flex;align-items:center;gap:10px;margin:0 0 14px"><div style="flex:1;height:1px;background:var(--border)"></div><span style="font-size:11px;color:var(--muted)">or</span><div style="flex:1;height:1px;background:var(--border)"></div></div>
+      </div>
       <div class="ob-title">Enter your group code</div>
       <div class="ob-sub">Your organiser will have shared a short code</div>
       <input class="code-input" id="codeInput" maxlength="10" placeholder="······" autocomplete="off" oninput="this.value=this.value.toUpperCase()">
       <div id="codeError" class="warn-box warn-red hidden">Group not found. Check your code.</div>
       <button class="btn btn-gold" onclick="verifyCode()">Continue</button>
+      <!-- DOOR 2 — funnel activation (NORTHSTAR §5.3). Framing is deliberate:
+           "start your group", never "solo mode" — alone is day zero of a
+           group, not a product of its own. Hidden while joining another group
+           from inside the app (_joinMode), where a create pitch is noise.
+           PROMOTION GATE: this button reaches prod only in the same push that
+           enables App Check (SECURITY_REDTEAM.md rank 4) — creation cannot be
+           rate-limited in rules. -->
+      <div id="founderDoor">
+        <div style="display:flex;align-items:center;gap:10px;margin:14px 0 10px"><div style="flex:1;height:1px;background:var(--border)"></div><span style="font-size:11px;color:var(--muted)">or</span><div style="flex:1;height:1px;background:var(--border)"></div></div>
+        <button class="btn btn-surface" style="margin:0;width:100%" onclick="showScreen('create')">Start your own group</button>
+        <div style="margin-top:6px;font-size:11px;color:var(--muted);text-align:center">Works alone from day one. Teams unlock as friends join.</div>
+      </div>
       <div id="joinCancel" class="hidden" style="margin-top:12px;text-align:center"><span onclick="cancelJoin()" style="font-size:12px;color:var(--gold);cursor:pointer">← Back to my group</span></div>
       <!-- The escape hatch, ON THE FIRST SCREEN. The nav's ↻ only exists once
            you're already inside, which is no use to someone the login is
@@ -201,6 +251,22 @@
       <input class="code-input" id="pinConfirm" type="tel" inputmode="numeric" maxlength="4" placeholder="confirm" autocomplete="off" oninput="this.value=this.value.replace(/[^0-9]/g,'')" style="margin-top:8px">
       <div id="pinError" class="warn-box warn-red hidden" style="margin-top:10px"></div>
       <button class="btn btn-gold" style="margin-top:10px" onclick="submitNewPin()">Set PIN &amp; Continue</button>
+      <!-- Founder-only escape. A stranger thirty seconds in hasn't earned a
+           credential prompt yet. Skip DEFERS, never deletes: identity (userId
+           + users doc) is still established by skipPinForNow(), but pinSet
+           stays absent, so the existing login routing asks again on the next
+           device. Unhidden ONLY by the founder creation path — every other
+           _pinFlow entry re-hides it. -->
+      <div id="pinSkip" class="hidden" style="margin-top:12px;text-align:center"><span onclick="skipPinForNow()" style="font-size:12px;color:var(--gold);cursor:pointer">Skip for now — set it when it matters</span></div>
+      <!-- EXIT. This was the only onboarding step with no way out and no
+           hard-reset hatch: if the write kept failing (which is not
+           hypothetical — a month of http:// failures landed people exactly
+           here) the only escape was closing the tab, and reloading returned
+           them to the same screen. Shown only when there IS a live session to
+           return to, so it never appears mid-registration where going "back"
+           would mean nowhere. -->
+      <div id="pinBack" class="hidden" style="margin-top:14px;text-align:center"><span onclick="cancelPinStep()" style="font-size:12px;color:var(--muted);cursor:pointer;text-decoration:underline">← Back to my group</span></div>
+      <div class="ob-fix"><span onclick="confirmHardReset()">Stuck here? Clear this device and start fresh</span></div>
     </div>
     <div class="ob-step" id="ob-s4">
       <div class="ob-title">Enter your PIN</div>
@@ -217,26 +283,27 @@
   </div>
 </div>
 
-<!-- ══ SELF-SERVE GROUP CREATION (S3 §4.2) — DARK LAUNCH ══
-     Reachable ONLY via ?create in the URL (see bootApp). No button, link, or
-     any other reference to this screen exists anywhere else in this file or
-     updates.html — that is the entire security model for this launch stage.
-     Visible CTAs land later, inside S4's own promotion commit, coupled to
-     the security gate going live in the same push (NORTHSTAR §4.2/§5.3). -->
+<!-- ══ SELF-SERVE GROUP CREATION — FUNNEL ACTIVE (was S3 §4.2 dark launch) ══
+     Now reachable from onboarding step 1 (#founderDoor) as well as ?create.
+     §5.3's gate is honoured at the PROMOTION layer, not here: prod rules are
+     deployed + hostile-console verified (red team, Aug), and the named
+     checklist line for promoting THIS screen's visibility is App Check going
+     live in the same push. Creates a FOUNDER group: numTeams 1, usable alone,
+     teams unlock as the roster grows (see selfServeCreateGroup). -->
 <div class="screen" id="screen-create">
   <div class="ob-logo">FORGE</div>
-  <div class="ob-tag">Start a new group.</div>
+  <div class="ob-tag">Start your own group.</div>
   <div class="ob-card">
     <div class="ob-step active">
-      <div class="ob-title">Create Your Group</div>
-      <div class="ob-sub">Defaults: roles off, 2 teams, 8-workout minimum. You can adjust these later in Admin.</div>
+      <div class="ob-title">Start Your Group</div>
+      <div class="ob-sub">Works alone from day one — log workouts, build a streak, set a monthly goal. Teams and rivalries unlock as friends join with your code.</div>
       <input type="text" id="ssGroupName" placeholder="Group name" maxlength="40" style="margin-bottom:10px">
       <input type="text" id="ssCreatorName" placeholder="Your name" maxlength="24" style="margin-bottom:10px">
       <input type="text" id="ssCustomCode" placeholder="Custom code (optional — 6 letters/numbers)" maxlength="6" autocomplete="off" oninput="this.value=this.value.toUpperCase()">
       <div style="font-size:11px;color:var(--muted);margin-top:2px">Leave blank and we'll forge one for you.</div>
       <div id="ssError" class="warn-box warn-red hidden" style="margin-top:10px"></div>
       <button class="btn btn-gold" style="margin-top:10px" onclick="selfServeCreateGroup()">Create Group</button>
-      <div id="ssResult" class="warn-box warn-green hidden" style="margin-top:14px"></div>
+      <div style="margin-top:14px;text-align:center"><span onclick="showScreen('onboard');showObStep(1)" style="font-size:12px;color:var(--gold);cursor:pointer">← I have a group code</span></div>
     </div>
   </div>
 </div>
@@ -292,6 +359,17 @@
          Monday or Tuesday, and only once per week per group (dismissal is
          stored per group + per week-start so it can never resurface). -->
     <div id="mondayRecap"></div>
+
+    <!-- HEALTH SUGGESTIONS (native only). A workout your phone already knows
+         about, offered for one-tap logging. Renders nothing on the web, when
+         Health isn't connected, or when there's nothing new to suggest.
+         Painted by renderHealthSuggestions(). D2: nothing here has left the
+         phone; confirming creates a normal Forge log via submitLog(). -->
+    <div id="healthSuggest"></div>
+    <!-- FOUNDER CARD — solo groups (numTeams 1) only. The invite loop: code,
+         share, countdown to teams; flips to a split-into-teams nudge at 6.
+         renderFounderCard() owns it; renders empty for every other group. -->
+    <div id="founderCard"></div>
 
     <!-- PERSONAL MONTHLY GOAL. renderGoalRing() / openGoalInput() / _loadMyGoals()
          have been complete and callable for weeks with no div to paint into, so
@@ -522,6 +600,53 @@
          normal user can do to themselves. Populated by renderDeleteAccountCard(). -->
     <div class="shdr">Account</div>
     <div class="card" id="deleteAccountCard"><div class="tmuted">Loading…</div></div>
+
+    <!-- PRIVACY & CONTACT — two separate store requirements met by one card.
+         App Store 5.1.1(i) wants the privacy policy reachable "within the app",
+         not only from a website; the iOS bundle excludes about/, which is where
+         the web app's only policy link lived, so inside the app it was
+         unreachable. Guideline 1.2 separately wants published contact details
+         for anyone who needs to report something.
+
+         The href is RELATIVE on purpose, and that is the whole trick: on the
+         web it resolves to goforge.in/privacy.html, and inside the iOS bundle
+         to the copy shipped by scripts/build-www.mjs. One link, correct in both
+         places, and it still works with no network — which an absolute URL
+         would not, since the app is bundled precisely so it survives offline.
+         Also avoids limitsNavigationsToAppBoundDomains blocking an outbound
+         navigation in the webview. -->
+    <!-- BLOCKED PEOPLE (Guideline 1.2) — the manage/undo half of blocking.
+         Hidden entirely when the list is empty, so it costs nothing to the
+         overwhelming majority who never block anyone. -->
+    <div id="blockedShdr" class="shdr" style="display:none">Hidden people</div>
+    <div class="card" id="blockedCard" style="display:none"></div>
+
+    <!-- WEEKLY RECAP REMINDER — native only. Renders nothing in a browser,
+         because a local notification is a phone capability and pretending
+         otherwise on the web would be a dead switch. Populated by
+         renderRecapNotifCard(). -->
+    <div id="recapNotifShdr" class="shdr" style="display:none">Weekly recap</div>
+    <div class="card" id="recapNotifCard" style="display:none"></div>
+
+    <!-- APPLE HEALTH / HEALTH CONNECT (native only). Opt-in; permission is
+         requested when the user asks, never at boot. Read-only by design —
+         see the HEALTH block in appState.js. Painted by renderHealthCard(). -->
+    <div id="healthShdr" class="shdr" style="display:none">Health</div>
+    <div class="card" id="healthCard" style="display:none"></div>
+
+    <div class="shdr">Privacy &amp; support</div>
+    <div class="card">
+      <div class="tmuted" style="font-size:12px;margin-bottom:10px">
+        What Forge stores, why, how long, and how to get it deleted.
+      </div>
+      <a href="privacy.html" target="_blank" rel="noopener"
+         style="color:var(--gold);font-size:14px;font-weight:600;text-decoration:none">
+        Read the privacy policy</a>
+      <div class="tmuted" style="font-size:12px;margin-top:12px">
+        Something wrong, or someone behaving badly? Email a real person:
+        <a href="mailto:team@goforge.in" style="color:var(--gold)">team@goforge.in</a>
+      </div>
+    </div>
   </div>
 
   <!-- IRON PLEDGE -->
@@ -723,6 +848,16 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<!-- Callable Cloud Functions (AUTH_DESIGN_FINAL Phase 2): claimIdentity,
+     awardSeasonBadges, adminResetPin. Region asia-south1 (matches Firestore
+     + the deployed functions). Inert until a caller invokes it. -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
+<!-- App Check (SECURITY_REDTEAM rank 4). Loaded BEFORE firebase.js so
+     activate() can run before the first Firestore call — attestation has to
+     be in place before requests go out, not after. It is ~30KB that only
+     matters once a reCAPTCHA site key exists; firebase.js no-ops without one,
+     so this is inert weight until the console step is done. -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-check-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" integrity="sha384-9nhczxUqK87bcKHh20fSQcTGD4qq5GhayNYSYWqwBkINBhOfQLg/P5HG5lF1urn4" crossorigin="anonymous"></script>
 <script src="src/config/firebase.js"></script>
 <script src="src/state/appState.js"></script>
@@ -753,6 +888,22 @@ if(typeof window.teamLettersOf !== 'function'){
 if(typeof window.isSoloMode !== 'function'){
   window.isSoloMode = function(){
     return Number(window.season && window.season.numTeams) === 1;
+  };
+}
+// tap() is called from five hot paths including log submission, so a stale
+// appState.js would throw on the most common action in the app. The fallback is
+// the exact pre-native behaviour: navigator.vibrate on the platforms that have
+// it, silence on the ones that do not.
+if(typeof window.tap !== 'function'){
+  window.tap = function(style){
+    try{ if(navigator.vibrate) navigator.vibrate(style === 'heavy' ? 18 : 8); }catch(e){}
+  };
+}
+if(typeof window.isNative !== 'function'){
+  window.isNative = function(){
+    const C = window.Capacitor;
+    return !!(C && ((typeof C.isNativePlatform === 'function' && C.isNativePlatform())
+                     || C.platform === 'ios' || C.platform === 'android'));
   };
 }
 // Not a boot path — this one runs inside the account-deletion transaction. A
@@ -847,6 +998,12 @@ function escForInlineJsAttr(s){
   return esc(String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
 }
 async function sha256hex(str){
+  // Name the failure instead of letting it surface as "check connection".
+  // crypto.subtle is absent in any non-secure context; the head-of-page guard
+  // should have redirected already, so reaching here means https itself is
+  // unavailable (a proxy stripping it, an ancient WebView). Callers translate
+  // INSECURE_CONTEXT into an instruction the person can actually act on.
+  if(!(window.crypto && window.crypto.subtle)) throw new Error('INSECURE_CONTEXT');
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
@@ -1169,7 +1326,11 @@ window.onload = () => {
   // Firestore queries, so they must not run until we have a UID.
   ensureAuth().then(uid => {
     window.currentUid = uid;   // available app-wide for Stage 2+ (PIN binding)
-    bootApp();
+    // RETURN it. bootApp is async, so without this its rejection escapes as an
+    // unhandled rejection and skips the .catch below — meaning the boot-failure
+    // recovery screen never renders and the user is left staring at the default
+    // onboarding screen, which looks identical to being logged out.
+    return bootApp();
   }).catch(err => {
     // Auth itself failed — the app can't talk to Firestore at all. This is
     // exactly the signature of a wedged/corrupted local Firebase state (seen
@@ -1185,12 +1346,17 @@ window.onload = () => {
 };
 
 async function bootApp(){
-  // S3 §4.2 dark launch: the ONLY entry point to self-serve group creation.
-  // No link/button to this exists anywhere else — see the screen-create
-  // comment block for the full rationale.
+  try{ renderGoogleLoginDoor(); }catch(e){}   // before any screen shows
+  // Direct deep-link to group creation (kept from the S3 §4.2 dark-launch
+  // era; the screen is now also reachable from onboarding's #founderDoor —
+  // see the screen-create comment block for the promotion gate).
+  // An EXISTING session outranks the param: without this, a founder who
+  // created via a ?create URL reloads into the create form forever instead
+  // of their group (found live in SOLO QA — the creation flow also strips
+  // the param, this is the belt to that suspender for bookmarked links).
   if(location.search.includes('create')){
-    showScreen('create');
-    return;
+    migrateLegacySession();   // idempotent — the normal path below runs it too
+    if(!getSessions().length){ showScreen('create'); return; }
   }
   if(location.search.includes('superadmin')){
     const pin = prompt('Super admin PIN:');
@@ -1227,6 +1393,10 @@ async function bootApp(){
       }
     } catch(e){}
     showScreen('onboard');
+    // A Google LOGIN redirect lands here, not in loadGroup's restore hook —
+    // by definition this device has no session yet. Same call, no session
+    // required; inert while the flag is off.
+    try{ finishGoogleLinkIfReturning(); }catch(e){}
   }
 }
 
@@ -1333,6 +1503,8 @@ function choosePlayer(name){
     document.getElementById('pinInput').value = '';
     document.getElementById('pinConfirm').value = '';
     document.getElementById('pinError').classList.add('hidden');
+    document.getElementById('pinSkip')?.classList.add('hidden');   // founder-only affordance
+    document.getElementById('pinBack')?.classList.add('hidden');   // no live session to go back to here
     showObStep(3);
     return;
   }
@@ -1365,6 +1537,18 @@ async function submitPinEntry(){
       const uSnap = await db.collection('users').doc(p.userId).get();
       verified = uSnap.exists ? (await sha256hex(entered)) === uSnap.data().pinHash : (entered === p.pin);
     } catch(e){
+      // A missing crypto.subtle is NOT a failed doc read, and must not take the
+      // fallback. On http that fallback compares against roster.pin, which was
+      // scrubbed for almost everyone — so a CORRECT PIN was being rejected as
+      // wrong (10 logged cases, Jul–Aug 2026), and for the few legacy rows that
+      // still carry plaintext it silently authenticated against it. Stop, and
+      // say the one thing that fixes it.
+      if(e.message==='INSECURE_CONTEXT'){
+        logErr('submitPinEntry: insecure context, refusing plaintext fallback', e);
+        err.textContent='This page is not on a secure connection, so your PIN can’t be checked. Open https://goforge.in (with the s) and try again.';
+        err.classList.remove('hidden');
+        return;
+      }
       logErr('submitPinEntry: users doc read failed, falling back to roster.pin', e);
       verified = (entered === p.pin);
     }
@@ -1446,6 +1630,8 @@ function gracePinCheckOnResume(){
     document.getElementById('pinInput').value = '';
     document.getElementById('pinConfirm').value = '';
     document.getElementById('pinError').classList.add('hidden');
+    document.getElementById('pinSkip')?.classList.add('hidden');   // founder-only affordance
+    document.getElementById('pinBack')?.classList.add('hidden');   // no live session to go back to here
     showObStep(3);
     return true;
   }
@@ -1482,6 +1668,8 @@ async function registerAndJoin(){
   document.getElementById('pinInput').value = '';
   document.getElementById('pinConfirm').value = '';
   document.getElementById('pinError').classList.add('hidden');
+  document.getElementById('pinSkip')?.classList.add('hidden');   // founder-only affordance
+    document.getElementById('pinBack')?.classList.add('hidden');   // no live session to go back to here
   showObStep(3);
 }
 
@@ -1613,7 +1801,55 @@ async function submitNewPin(){
     logErr('submitNewPin '+(flow?.mode||''), e);
     if(e.message==='NAME_TAKEN'){ err.textContent='That name was just taken by someone else — go back and pick a different one.'; }
     else if(e.message==='NO_RECORD'){ err.textContent='Could not find your record. Please refresh.'; }
+    else if(e.message==='INSECURE_CONTEXT'){ err.textContent='This page is not on a secure connection, so PINs can’t be saved. Open https://goforge.in (with the s) and try again.'; }
     else { err.textContent='Save failed — check connection.'; }
+    err.classList.remove('hidden');
+  }
+}
+
+// Founder-only PIN deferral. Mirrors submitNewPin's grace branch minus the
+// credential: identity IS established now (userId on the roster entry + a
+// users doc with pinHash:null) so day-one logs carry userId, but pinSet
+// stays absent — the existing login routing (choosePlayer /
+// gracePinCheckOnResume) asks again on the next device, and submitNewPin's
+// else-branch merge fills the hash into the SAME users doc then. Skip
+// defers; nothing is lost and no second identity can be minted.
+async function skipPinForNow(){
+  const flow = window._pinFlow;
+  if(!flow || !flow.founder) return;   // never a path for non-founders
+  const err = document.getElementById('pinError');
+  err.classList.add('hidden');
+  if(!season || !seasonId){ err.textContent='Still loading — try again in a second.'; err.classList.remove('hidden'); return; }
+  try {
+    const candidateUserId = db.collection('users').doc().id;
+    const sRef = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
+    let wRoster=null, myEntry=null, createdUserDoc=false;
+    await withWriteWatchdog(db.runTransaction(async tx=>{
+      createdUserDoc=false;   // reset per attempt — tx retries must not overcount
+      const sSnap=await tx.get(sRef);
+      if(!sSnap.exists) throw new Error('SEASON_MISSING');
+      const roster=sSnap.data().roster||[];
+      const entry=roster.find(p=>p.name===flow.name);
+      if(!entry) throw new Error('NO_RECORD');
+      entry.uid=(window.currentUid||null);
+      if(!entry.userId){ entry.userId=candidateUserId; createdUserDoc=true; }
+      tx.update(sRef,{roster});
+      if(createdUserDoc){
+        tx.set(db.collection('users').doc(entry.userId), newUserDocFields(entry.name, null, groupCode, groupData?.name, window.currentUid, 'founder-skip'));
+      }
+      wRoster=roster; myEntry=entry;
+    }), 'skipPinForNow');
+    if(createdUserDoc) bumpGlobalStat('totalUsers', 1);   // fire-and-forget
+    season.roster=wRoster;
+    me=myEntry;
+    upsertSession(groupCode, myEntry, groupData?.name);
+    window._pinFlow = null;
+    launchApp();
+  } catch(e){
+    logErr('skipPinForNow', e);
+    err.textContent = (e.message==='NO_RECORD') ? 'Could not find your record. Please refresh.'
+      : (e.message==='INSECURE_CONTEXT') ? 'This page is not on a secure connection. Open https://goforge.in (with the s) and try again.'
+      : 'Could not finish setup — check connection.';
     err.classList.remove('hidden');
   }
 }
@@ -1645,13 +1881,36 @@ async function loadGroup(code, fromCache){
   // everything (that caused the mass-lockout). Transient errors just alert.
   try {
     const gSnap = await db.collection('groups').doc(code).get();
-    if(!gSnap.exists){ handleDeadGroup(code, 'That group no longer exists.'); return; }
+    // NEVER destroy a session on evidence that came from the local cache.
+    // With enablePersistence on, a get() that cannot reach the server resolves
+    // against IndexedDB instead of rejecting — and an EVICTED cache reports
+    // exists:false. Browsers evict the big IndexedDB store first and leave the
+    // tiny localStorage session intact, so "offline + evicted" looked exactly
+    // like "this group was deleted", and handleDeadGroup then removed the
+    // session permanently. That is the "installed PWA forgot me" incident with
+    // the app as the culprit. (The unused `fromCache` parameter every caller
+    // already passes shows this guard was intended from the start.)
+    if(!gSnap.exists){
+      if(gSnap.metadata && gSnap.metadata.fromCache){
+        logErr('loadGroup: cache says group missing — refusing to drop session', new Error('CACHE_MISS_NOT_DELETION'));
+        toast('Can’t reach the server right now. Your group is still here — try again in a moment.','error');
+        return;
+      }
+      handleDeadGroup(code, 'That group no longer exists.'); return;
+    }
     groupData = gSnap.data();
 
     const sid = groupData.currentSeasonId;
     if(!sid){ handleDeadGroup(code, 'That group has no active season.'); return; }
     const sSnap = await db.collection('groups').doc(code).collection('seasons').doc(sid).get();
-    if(!sSnap.exists){ handleDeadGroup(code, 'That group\'s active season is missing.'); return; }
+    if(!sSnap.exists){
+      if(sSnap.metadata && sSnap.metadata.fromCache){
+        logErr('loadGroup: cache says season missing — refusing to drop session', new Error('CACHE_MISS_NOT_DELETION'));
+        toast('Can’t reach the server right now. Your group is still here — try again in a moment.','error');
+        return;
+      }
+      handleDeadGroup(code, 'That group\'s active season is missing.'); return;
+    }
     season = sSnap.data();
     seasonId = sid;
 
@@ -1715,6 +1974,7 @@ function launchApp(){
   try { localStorage.setItem('forge_seen','1'); } catch(e){}  // durable-ish "has launched before" marker for the session_lost breadcrumb
   window._joinMode = false;
   document.getElementById('joinCancel')?.classList.add('hidden');
+  document.getElementById('founderDoor')?.classList.remove('hidden');   // reset for the next fresh onboarding
   showScreen('app');
   document.getElementById('navAv').textContent = me.name[0];
   document.getElementById('navNm').textContent = me.name;
@@ -1855,6 +2115,7 @@ function joinAnotherGroup(){
   document.getElementById('codeInput').value='';
   document.getElementById('codeError').classList.add('hidden');
   document.getElementById('joinCancel')?.classList.remove('hidden');
+  document.getElementById('founderDoor')?.classList.add('hidden');   // joining ≠ founding
   showScreen('onboard');
   showObStep(1);
 }
@@ -1863,6 +2124,7 @@ function joinAnotherGroup(){
 function cancelJoin(){
   window._joinMode = false;
   document.getElementById('joinCancel')?.classList.add('hidden');
+  document.getElementById('founderDoor')?.classList.remove('hidden');
   const sessions = getSessions();
   if(!sessions.length) return;
   const active = sessions.find(s=>s.code===getActiveCode()) || sessions[0];
@@ -1996,6 +2258,11 @@ function renderHome(){
   if(!groupData||!me) return;
   try { renderMirrorHome(); }
   catch(e){ logErr('renderMirrorHome', e); }
+  // Its own guard, like every other renderer here. Sharing renderMirrorHome's
+  // try meant a Health failure was logged under the wrong name AND a Mirror
+  // failure silently took the Health card with it.
+  try { renderHealthSuggestions(); }
+  catch(e){ logErr('renderHealthSuggestions', e); }
   // Restoring the div was only half of it — renderGoalRing() was never called
   // from the render loop either, only from its own lazy loader and the Cancel
   // button, so nothing would have painted it. Isolated: a goal-ring failure
@@ -2004,6 +2271,8 @@ function renderHome(){
   catch(e){ logErr('renderGoalRing', e); }
   try { renderMondayRecap(); }
   catch(e){ logErr('renderMondayRecap', e); }
+  try { renderFounderCard(); }
+  catch(e){ logErr('renderFounderCard', e); }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -2504,7 +2773,7 @@ function mirLogQuick(w){
   // vibrate() throws on some embedded webviews.
   // NOTE: iOS Safari has no Vibration API at all, so this is a no-op on iPhone
   // by design of the platform. It works on Android Chrome and in the TWA.
-  try{ if(navigator.vibrate) navigator.vibrate(18); }catch(e){}
+  tap('heavy');
   // DISTANCE STEP — only when this season has opted into a team distance goal
   // AND the tapped workout is one a distance belongs on. Otherwise the original
   // one-tap path runs completely unchanged, which is the whole point of Mirror.
@@ -2565,9 +2834,19 @@ function mirLiftToggle(el, m){
   const i=_liftPicked.indexOf(m);
   if(i>=0){ _liftPicked.splice(i,1); el.classList.remove('on'); }
   else { _liftPicked.push(m); el.classList.add('on'); }
-  try{ if(navigator.vibrate) navigator.vibrate(8); }catch(e){}
+  tap();
 }
 function _mirLiftGo(w, note){
+  // Guideline 1.2 tripwire. Free text on a log is visible to the whole group,
+  // so it is checked before it can be written. Caught here rather than at the
+  // Firestore layer so the person sees why and can fix it.
+  if(typeof offensiveTerm === 'function'){
+    const bad = offensiveTerm(note) || offensiveTerm(w);
+    if(bad){
+      toast('That wording will not post. Everyone in your group sees this.', 'error');
+      return;
+    }
+  }
   mirCloseSheet();
   selDay=_mirPendingDay; selW=[w]; selKm=null;
   selNote = note || null;
@@ -2692,6 +2971,11 @@ function mirLogCustom(){
   const v=(inp.value||'').trim().slice(0,30);
   if(!v) return;
   if(/[<>"'\\]/.test(v)){ toast('Workout name can\'t contain these characters: < > " \' \\','error'); return; }
+  // Guideline 1.2 tripwire — a custom workout name goes straight into
+  // the shared feed, so it is checked on the way in.
+  if(typeof offensiveTerm === 'function' && offensiveTerm(v)){
+    toast('That wording will not post. Everyone in your group sees this.', 'error'); return;
+  }
   mirLogQuick(v);
 }
 
@@ -3336,7 +3620,7 @@ function mirShowReport(rw){
   try{ mirFillCrossGroup(activeShowed, !!(rw && rw.movedTo), isToday); }
   catch(e){ logErr('mirFillCrossGroup', e); }
   window._mirLast={day:_mirPendingDay};
-  if(navigator.vibrate) navigator.vibrate([25,30,60]);
+  tap('success');
   const rep=document.getElementById('mirReport');
   rep.classList.add('on'); rep.style.transform='';
 }
@@ -3492,7 +3776,7 @@ async function mirFillCrossGroup(activeShowed, activeMoved, isToday){
   // case that used to get silence — so it gets the celebration instead.
   if(anyMove && !activeMoved && !matchMedia('(prefers-reduced-motion: reduce)').matches){
     try{ fireConfetti(); }catch(e){}
-    try{ if(navigator.vibrate) navigator.vibrate([18,40,28]); }catch(e){}
+    tap('success');
   }
 }
 
@@ -3672,6 +3956,9 @@ async function renderProfile(){
   seasonsEl.innerHTML=skRows(2);
   renderProfileInsights();   // parallel + independent — an insights failure never blocks stats/seasons
   renderDeleteAccountCard(); // ditto — never let the delete card break the tab
+  try{ renderRecapNotifCard(); }catch(e){ logErr('renderRecapNotifCard', e); } // native-only, inert on web
+  try{ renderHealthCard(); }catch(e){ logErr('renderHealthCard', e); }           // native-only, inert on web
+  try{ renderBlockedCard(); }catch(e){ logErr('renderBlockedCard', e); }      // hidden when nobody is blocked
   renderGoogleAuthCard();    // inert while FEATURE_GOOGLE_AUTH is off
   loadMyAuthState();         // one doc read, only when the flag is on
   renderPushCard();          // inert while FEATURE_PUSH is off
@@ -3898,13 +4185,23 @@ async function refreshPushTokenQuietly(){
 }
 window.refreshPushTokenQuietly = refreshPushTokenQuietly;
 
-// ── GOOGLE SIGN-IN — AUTH PHASE 1 ──────────────────────────────────────────
-// Contract: AUTH_DESIGN_FINAL.md Option A, locked 25 Jul 2026.
-// Phase 1 is COEXISTENCE ONLY: linking a Google account records authUid on the
-// users doc and changes nothing else. PIN login still works, anonymous boot
-// still works, and no rule reads authUid yet — that lands in Phase 2 with the
-// claim Function. So the worst case of a bug here is a user who linked and saw
-// no benefit, never a user who cannot get in.
+// ── GOOGLE SIGN-IN — AUTH PHASE 2 ──────────────────────────────────────────
+// Contract: AUTH_DESIGN_FINAL.md Option A + AUTH_PHASE2_NOTES.md.
+//
+// WHAT CHANGED FROM PHASE 1, AND WHY IT HAD TO. Phase 1 wrote `authUid` onto
+// the users doc straight from the client. The ownership rule now FORBIDS that
+// (a client may never set or change authUid at all) — because a client-side
+// write means anyone could point an unclaimed identity at their own Google
+// account with no proof of ownership, which is the takeover the whole design
+// exists to close. So the write moves to the claimIdentity Function, which
+// verifies the PIN server-side first. The PIN prompt below is not friction for
+// its own sake: it is the proof.
+//
+// TWO ENTRY POINTS, one redirect handler:
+//   • LINK  — from Profile, already in the app. Google → PIN → claimIdentity.
+//   • LOGIN — from the first screen, fresh device. Google → look up the
+//             identity by authUid → rebuild sessions → straight in, no PIN.
+// The pending intent is stashed in sessionStorage before the redirect leaves.
 //
 // EVERY surface is gated on FEATURE_GOOGLE_AUTH. With it false, renderGoogleAuthCard
 // hides both elements and returns, and consumeGoogleRedirect resolves {linked:false}
@@ -3918,24 +4215,37 @@ function renderGoogleAuthCard(){
   }
   hdr.style.display=''; el.style.display='';
   const linked = !!(window._myAuthUid);
-  el.innerHTML = linked
-    ? '<div class="tmuted" style="font-size:12px">'
+  if(linked){
+    el.innerHTML = '<div class="tmuted" style="font-size:12px">'
       + mirIco('g-flame','color:var(--green)')
       + ' <b>Secured with Google</b>' + (window._myAuthEmail ? (' — ' + esc(window._myAuthEmail)) : '')
-      + '<br>You can sign in on any device without a PIN. Your streak and history come with you.</div>'
-    : '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
-      + 'Right now your account lives on <b>this device</b>. Clear your browser data or change '
-      + 'phone and you have to rejoin each group by hand. Link a Google account and it follows you.</div>'
-      + '<button class="btn btn-gold" id="googleLinkBtn" style="margin:0" onclick="linkGoogleAccount()">Secure my account with Google</button>'
+      + '<br>You can sign in on any device without a PIN. Your streak and history come with you.</div>';
+    return;
+  }
+  // Returned from Google and waiting on the PIN proof.
+  if(window._claimPending){
+    el.innerHTML = '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
+      + 'Signed in as <b>' + esc(window._claimPending.email || 'your Google account') + '</b>. '
+      + 'Enter your 4-digit Forge PIN to prove this account is yours.</div>'
+      + '<input class="code-input" id="claimPinInput" type="tel" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off" style="margin-bottom:8px" oninput="this.value=this.value.replace(/[^0-9]/g,\'\')">'
+      + '<button class="btn btn-gold" style="margin:0" onclick="submitGoogleClaim()">Confirm and secure</button>'
       + '<div id="googleAuthResult" style="margin-top:10px;font-size:13px"></div>';
+    return;
+  }
+  el.innerHTML = '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
+    + 'Right now your account lives on <b>this device</b>. Clear your browser data or change '
+    + 'phone and you have to rejoin each group by hand. Link a Google account and it follows you.</div>'
+    + '<button class="btn btn-gold" id="googleLinkBtn" style="margin:0" onclick="linkGoogleAccount()">Secure my account with Google</button>'
+    + '<div id="googleAuthResult" style="margin-top:10px;font-size:13px"></div>';
 }
 
 async function linkGoogleAccount(){
   const out = document.getElementById('googleAuthResult');
   const say = (m,bad)=>{ if(out){ out.style.color = bad ? 'var(--red)' : 'var(--muted)'; out.textContent = m; } };
   try{
+    try{ sessionStorage.setItem('forge_google_intent','link'); }catch(e){}
     say('Opening Google…');
-    await startGoogleSignIn();      // navigates away; nothing after this runs
+    await startGoogleSignIn('link');   // navigates away; nothing after this runs
   }catch(e){
     if(e && e.message==='FEATURE_OFF'){ say('Google sign-in is not switched on yet.', true); return; }
     logErr('linkGoogleAccount', e);
@@ -3943,14 +4253,42 @@ async function linkGoogleAccount(){
   }
 }
 
-// Called once on boot, AFTER me/userId are known. Writes the identity link.
-// Fire-and-forget by design: this must never be able to block or fail a launch.
+// From the FIRST screen (no session): sign in and restore whatever identity
+// this Google account already owns. No PIN — the claim already happened once.
+async function loginWithGoogle(){
+  try{
+    try{ sessionStorage.setItem('forge_google_intent','login'); }catch(e){}
+    await startGoogleSignIn('login');   // sign IN, never link — see firebase.js
+  }catch(e){
+    if(e && e.message==='FEATURE_OFF'){ toast('Google sign-in is not switched on yet.','error'); return; }
+    logErr('loginWithGoogle', e);
+    toast('Could not open Google sign-in.','error');
+  }
+}
+
+// Called once on boot. Handles BOTH redirect intents. Fire-and-forget by
+// design: it must never be able to block or fail a launch.
 async function finishGoogleLinkIfReturning(){
   if(!window.FEATURE_GOOGLE_AUTH) return;
+  let intent='link';
+  try{ intent = sessionStorage.getItem('forge_google_intent') || 'link'; }catch(e){}
   try{
-    const r = await consumeGoogleRedirect();
+    let r = await consumeGoogleRedirect();
     if(r.error === 'ALREADY_IN_USE'){
-      toast('That Google account already runs another Forge account.','error');
+      // NOT a failure — it means this Google account already owns a Forge
+      // identity, which is the 1:1 rule working. Previously this dead-ended
+      // with "that account already runs another Forge account", which to the
+      // person reading it says their own account belongs to a stranger.
+      // Finish the journey instead: sign in AS that account and restore it.
+      if(r.credential){
+        try {
+          const signed = await signInAsGoogle(r.credential);
+          try{ sessionStorage.removeItem('forge_google_intent'); }catch(e){}
+          await restoreIdentityFromGoogle(signed);
+          return;
+        } catch(e){ logErr('finishGoogleLinkIfReturning: signInWithCredential', e); }
+      }
+      toast('That Google account is already linked to a Forge account. Use “Continue with Google” on the first screen to sign back in.','error');
       return;
     }
     if(r.error === 'PROVIDER_DISABLED'){
@@ -3958,23 +4296,109 @@ async function finishGoogleLinkIfReturning(){
       return;
     }
     if(!r.linked) return;
-    window._myAuthUid   = r.uid;
-    window._myAuthEmail = r.email;
-    if(me && me.userId){
-      // merge, never overwrite: this doc holds the credential and the stats.
-      // authUid is written here in Phase 1; Phase 2 makes it server-owned so a
-      // client can never point someone else's identity at its own Google uid.
-      await db.collection('users').doc(me.userId).set({
-        authUid: r.uid,
-        email: r.email || null,
-        authLinkedAt: firebase.firestore.FieldValue.serverTimestamp()
-      }, {merge:true});
-    }
+    try{ sessionStorage.removeItem('forge_google_intent'); }catch(e){}
+
+    if(intent === 'login'){ await restoreIdentityFromGoogle(r); return; }
+
+    // LINK intent: the identity is not bound until claimIdentity verifies the
+    // PIN server-side. Stash the pending state and let the card collect it —
+    // no client write of authUid is possible or attempted (rules forbid it).
+    window._claimPending = { uid:r.uid, email:r.email };
     renderGoogleAuthCard();
-    toast('Account secured with Google.','success');
+    showTab('profile');
+    toast('Signed in with Google — confirm your PIN to finish.','default');
   }catch(e){ logErr('finishGoogleLinkIfReturning', e); }
 }
 window.finishGoogleLinkIfReturning = finishGoogleLinkIfReturning;
+
+// The PIN proof. claimIdentity is the ONLY writer of authUid; a wrong PIN
+// writes nothing and costs one of five hourly attempts.
+async function submitGoogleClaim(){
+  const out = document.getElementById('googleAuthResult');
+  const say = (m,bad)=>{ if(out){ out.style.color = bad ? 'var(--red)' : 'var(--muted)'; out.textContent = m; } };
+  const pin = (document.getElementById('claimPinInput')||{}).value || '';
+  if(!/^\d{4}$/.test(pin)){ say('Enter your 4-digit PIN.', true); return; }
+  if(!me || !groupCode){ say('Still loading — try again in a second.', true); return; }
+  try{
+    say('Checking…');
+    await callFunction('claimIdentity', { groupCode, name: me.name, pin });
+    window._claimPending = null;
+    // Re-read rather than trust local state — the function is the authority
+    // on what was actually bound, and it also refreshes the card.
+    await loadMyAuthState();
+    toast('Account secured with Google.','success');
+  }catch(e){
+    const msg = (e && e.message) || '';
+    // Callable errors arrive with the server's message intact — surface it,
+    // since every one of them is actionable by the person reading it.
+    if(/No PIN is set/i.test(msg)){
+      say('This account has no PIN yet. Set one first (Profile → PIN), then secure it with Google.', true);
+    } else if(/already secured/i.test(msg)){
+      say('This player is already secured by a different Google account.', true);
+    } else if(/already runs/i.test(msg)){
+      say(msg, true);
+    } else if(/Too many attempts/i.test(msg)){
+      say(msg, true);
+    } else if(/doesn.t match/i.test(msg) || /PIN/i.test(msg)){
+      say('That PIN doesn’t match. Try again, or ask your group admin to reset it.', true);
+    } else if(msg === 'FUNCTIONS_SDK_MISSING'){
+      say('Could not reach the server. Reload and try again.', true);
+    } else {
+      logErr('submitGoogleClaim', e);
+      say('Could not secure the account — check your connection.', true);
+    }
+  }
+}
+
+// Fresh device: find the identity this Google account owns and rebuild its
+// sessions. Reads users-by-authUid (one indexed query), then each membership's
+// current-season roster to recover the player entry the app expects.
+async function restoreIdentityFromGoogle(r){
+  try{
+    const q = await db.collection('users').where('authUid','==',r.uid).limit(1).get();
+    if(q.empty){
+      toast('No Forge account is linked to that Google sign-in yet. Join with your group code first, then secure it.','error');
+      return;
+    }
+    const uDoc = q.docs[0], u = uDoc.data();
+    if(u.deletedAt){ toast('That account was deleted.','error'); return; }
+    const codes = Object.keys(u.memberships || {});
+    if(!codes.length){ toast('That account is not in any group yet.','error'); return; }
+    let restored = 0, firstCode = null;
+    for(const code of codes.slice(0, MAX_GROUPS)){
+      try{
+        const gS = await db.collection('groups').doc(code).get();
+        if(!gS.exists) continue;
+        const sid = gS.data().currentSeasonId;
+        if(!sid) continue;
+        const sS = await db.collection('groups').doc(code).collection('seasons').doc(sid).get();
+        if(!sS.exists) continue;
+        const entry = (sS.data().roster||[]).find(p => p && (p.userId === uDoc.id || (u.name && p.name === u.name)));
+        if(!entry) continue;
+        upsertSession(code, entry, gS.data().name);
+        if(!firstCode) firstCode = code;
+        restored++;
+      }catch(e){ logErr('restoreIdentityFromGoogle:'+code, e); }
+    }
+    if(!restored){ toast('Could not find your place in those groups — ask your admin.','error'); return; }
+    setActiveCode(firstCode);
+    groupCode = firstCode;
+    me = getSessions().find(s=>s.code===firstCode).player;
+    toast('Welcome back, '+me.name+'.','success');
+    loadGroup(groupCode, true);
+  }catch(e){
+    logErr('restoreIdentityFromGoogle', e);
+    toast('Could not restore your account — check your connection.','error');
+  }
+}
+
+// Show the first-screen Google door only when the feature is on. Called at
+// boot (before any screen is shown) so the door never flashes into view on a
+// build where Google isn't configured.
+function renderGoogleLoginDoor(){
+  const el = document.getElementById('googleLoginDoor');
+  if(el) el.style.display = window.FEATURE_GOOGLE_AUTH ? '' : 'none';
+}
 
 // Load the link state for the card. Cheap: one doc read, only when the flag is on.
 async function loadMyAuthState(){
@@ -4011,6 +4435,161 @@ async function loadMyAuthState(){
 // is where that group's LOCAL name comes from — remove it first and a resumed
 // run can no longer find the logs.
 const DELETED_NAME = 'Deleted user';
+
+// ── HEALTH (Apple Health / Health Connect) ──────────────────────────────────
+// The connect card in Profile and the suggestion cards on Home. All of it is
+// native-only and renders nothing on the web. Read-only; suggestions become
+// ordinary Forge logs only when the user confirms (D2 in appState.js).
+function renderHealthCard(){
+  const hdr = document.getElementById('healthShdr');
+  const el  = document.getElementById('healthCard');
+  if(!el || !hdr) return;
+  if(typeof isNative !== 'function' || !isNative()){ hdr.style.display='none'; el.style.display='none'; return; }
+  hdr.style.display=''; el.style.display='';
+  const on = healthEnabled();
+  el.innerHTML =
+    '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
+    + (on
+      ? 'Connected. Workouts recorded on this phone (or your watch) show up on '
+        + 'Home for one-tap logging. Nothing is logged without your say-so, and '
+        + 'your health data never leaves this phone.'
+      : 'See workouts recorded on this phone (or your watch) on your Home screen, '
+        + 'and log them to your group with one tap. Read-only. Your health data '
+        + 'never leaves this phone.')
+    + '</div>'
+    + '<button class="btn' + (on ? '' : ' btn-gold') + '" id="healthBtn" style="margin:0;'
+    + (on ? 'background:var(--bg-card-2);color:var(--text)' : '') + '" '
+    + 'onclick="toggleHealth()">' + (on ? 'Disconnect' : 'Connect Apple Health') + '</button>'
+    + '<div id="healthResult" class="tmuted" style="font-size:12px;margin-top:10px"></div>';
+}
+
+async function toggleHealth(){
+  const out = document.getElementById('healthResult');
+  const say = m => { if(out) out.textContent = m; };
+  try{
+    if(healthEnabled()){
+      setHealthEnabled(false);
+      renderHealthCard(); renderHealthSuggestions();
+      return;
+    }
+    say('Asking permission…');
+    const r = await healthConnect();
+    if(r === 'granted'){
+      setHealthEnabled(true); tap('success');
+      renderHealthCard(); renderHealthSuggestions();
+    } else if(r === 'denied'){
+      say('Health access is off for Forge. Allow it in Settings > Health > Data Access, then try again.');
+    } else {
+      say('Not available on this device.');
+    }
+  }catch(e){ logErr('toggleHealth', e); say('Could not connect.'); }
+}
+
+// Home cards. At most two at a time — a wall of suggestions is a chore, two is
+// a gift. Only days with NO log yet from you in the active group (a suggestion
+// for a day you already logged is noise), only inside the server clamp (D3),
+// each offered once (seen-memory, logged or dismissed alike).
+async function renderHealthSuggestions(){
+  const el = document.getElementById('healthSuggest');
+  if(!el) return;
+  el.innerHTML = '';
+  if(typeof isNative !== 'function' || !isNative() || !healthEnabled()) return;
+  if(!me || !me.name || !season) return;
+  try{
+    const seen = healthSeen();
+    const myDays = new Set((allLogs||[])
+      .filter(l => l.player===me.name && !l.voided && l.month===season.month && l.year===season.year)
+      .map(l => l.day));
+    const picks = (await healthRecentWorkouts())
+      .filter(w => w.month===season.month && w.year===season.year)
+      .filter(w => !seen.includes(w.id))
+      .filter(w => !myDays.has(w.day))
+      .slice(0, 2);
+    if(!picks.length) return;
+    el.innerHTML = picks.map(w =>
+      '<div class="card" style="margin-bottom:10px">'
+      + '<div style="font-size:13px;font-weight:700;margin-bottom:2px">'
+      + esc(w.source || 'Your phone') + ' recorded a workout</div>'
+      + '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
+      + esc(w.label) + ' · ' + w.minutes + ' min · Day ' + w.day
+      + (w.km ? ' · ' + w.km + ' km' : '') + '</div>'
+      + '<div style="display:flex;gap:8px">'
+      + '<button class="btn btn-gold" style="margin:0;flex:1" '
+      + 'onclick="logHealthSuggestion(\'' + escForInlineJsAttr(w.id) + '\',\''
+      + escForInlineJsAttr(w.label) + '\',' + w.day + ',' + (w.km==null?'null':w.km) + ')">Log it</button>'
+      + '<button class="btn" style="margin:0;flex:1;background:var(--bg-card-2);color:var(--text)" '
+      + 'onclick="dismissHealthSuggestion(\'' + escForInlineJsAttr(w.id) + '\')">Not this one</button>'
+      + '</div></div>').join('');
+  }catch(e){ logErr('renderHealthSuggestions', e); el.innerHTML=''; }
+}
+
+function logHealthSuggestion(id, label, day, km){
+  try{
+    healthMarkSeen(id);
+    // The exact path a manual log takes — validation, celebration, streaks and
+    // all. km rides along only for distance workouts, same rule as manual.
+    selDay = day; selW = [label]; selNote = null;
+    selKm = (km != null && typeof isDistanceWorkout==='function' && isDistanceWorkout(label)) ? km : null;
+    window._mirrorLogMode = true;
+    submitLog();
+    renderHealthSuggestions();
+  }catch(e){ logErr('logHealthSuggestion', e); }
+}
+
+function dismissHealthSuggestion(id){
+  try{ healthMarkSeen(id); tap(); renderHealthSuggestions(); }catch(e){}
+}
+
+// ── WEEKLY RECAP REMINDER (native only) ─────────────────────────────────────
+// The ONE notification this app schedules on-device. Not "don't forget to work
+// out" — functions/index.js argues, correctly, that spending the notification
+// permission on nagging gets an app muted inside a week. This is the Monday
+// recap: last week is closed, the card is waiting. Calendar-based, so unlike
+// anything depending on live team state it cannot go stale while the phone is
+// offline. Streak-at-risk stays server-side, where teammate activity is known.
+function renderRecapNotifCard(){
+  const hdr = document.getElementById('recapNotifShdr');
+  const el  = document.getElementById('recapNotifCard');
+  if(!el || !hdr) return;
+  if(typeof isNative !== 'function' || !isNative()){ hdr.style.display='none'; el.style.display='none'; return; }
+  hdr.style.display=''; el.style.display='';
+  const on = notifEnabled();
+  el.innerHTML =
+    '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
+    + 'A single nudge on Monday morning when the week closes and your recap is ready. '
+    + 'Nothing else — Forge will never remind you to exercise.</div>'
+    // .btn alone sets no colour, so it inherited the UA link blue on iOS and
+    // looked like a mis-styled hyperlink. Gold when off (the action), muted
+    // when on (the undo) — matching every other primary/secondary pair.
+    + '<button class="btn' + (on ? '' : ' btn-gold') + '" id="recapNotifBtn" style="margin:0;'
+    + (on ? 'background:var(--bg-card-2);color:var(--text)' : '') + '" '
+    + 'onclick="toggleRecapNotif()">' + (on ? 'Turn off Monday reminder' : 'Remind me on Mondays')
+    + '</button>'
+    + '<div id="recapNotifResult" class="tmuted" style="font-size:12px;margin-top:10px">'
+    + (on ? 'On — Mondays at 8am.' : '') + '</div>';
+}
+
+async function toggleRecapNotif(){
+  const out = document.getElementById('recapNotifResult');
+  const say = m => { if(out) out.textContent = m; };
+  try{
+    if(notifEnabled()){
+      await cancelMondayRecap();
+      setNotifEnabled(false);
+      renderRecapNotifCard();
+      return;
+    }
+    say('Asking permission…');
+    const r = await scheduleMondayRecap();
+    if(r === 'scheduled'){
+      setNotifEnabled(true); tap('success'); renderRecapNotifCard();
+    } else if(r === 'denied'){
+      say('Notifications are off for Forge. Turn them on in iOS Settings, then try again.');
+    } else {
+      say('Not available on this device.');
+    }
+  }catch(e){ logErr('toggleRecapNotif', e); say('Could not set that up.'); }
+}
 
 function renderDeleteAccountCard(){
   const el = document.getElementById('deleteAccountCard');
@@ -4747,6 +5326,15 @@ async function submitLog(){
   // and the afterglow report is the only presentation. The write path itself
   // (multi-group broadcast + self-heal watchdog + demo/rank/mix denorm) is
   // unchanged. `subBtn` belonged to the deleted page — guarded, not assumed.
+  // RE-ENTRANCY GUARD. The old protection disabled `subBtn` — an element the
+  // Log tab's removal took with it, so `if(btn)` quietly guarded nothing and
+  // there has been NO double-submit protection since. The window is real: the
+  // picker sheet stays hit-testable for ~300ms while it slides out, nothing on
+  // screen changes during the up-to-4s commit, and a mobile double-tap lands
+  // in ~150ms. Two commits = two log docs, doubled workout counts, doubled
+  // lifetime stats and a doubled global counter.
+  if(window._submitInFlight){ return; }
+  window._submitInFlight = true;
   window._mirrorLogMode=false;
   const btn=document.getElementById('subBtn');
   if(btn){ btn.disabled=true; btn.textContent='Saving...'; }
@@ -4766,6 +5354,18 @@ async function submitLog(){
       } catch(e){ logErr('submitLog: skipped unreadable group '+sess.code, e); /* never block the log */ }
     }));
 
+    // NOTHING TO WRITE MEANS NOTHING TO CELEBRATE. The active group is only
+    // added from inside the sessions loop above, and getSessions() returns []
+    // on any storage read failure or unusable shape — so an empty targets list
+    // produced an empty batch, a commit that "succeeded", and the full
+    // confetti-and-report afterglow for a workout that was never saved
+    // anywhere. Fail loudly instead: this is the one outcome a logging app
+    // must never get wrong.
+    if(!targets.length){
+      logErr('submitLog: no write targets', new Error('EMPTY_TARGETS groupCode='+groupCode+' sessions='+sessions.length));
+      toast('Couldn’t save — this device lost track of your group. Reload and try again.','error');
+      return;
+    }
     const batch = db.batch();
     const newLogIds = new Set();   // reward screen: tells "already echoed into allLogs" apart from listener lag
     // Which log doc landed in which group. The afterglow needs this to work out
@@ -4912,6 +5512,12 @@ async function submitLog(){
       logErr('submitLog: post-commit presentation failed', e);
     }
   } catch(e){ console.error('submitLog failed:',e); toast('Error saving. Check connection.','error'); if(btn){ btn.disabled=false; btn.textContent='Log Workout'; } }
+  finally {
+    // Release on EVERY exit — success, the empty-targets return, and the catch
+    // above. A flag that leaks on one path would block every later log for the
+    // rest of the session, which is worse than the duplicate it prevents.
+    window._submitInFlight = false;
+  }
 }
 
 function fireSparks(){
@@ -5513,7 +6119,14 @@ function renderFeed(){
   // timestamp means "written by this device just now", so it sorts NEWEST.
   const PENDING=Number.MAX_SAFE_INTEGER;
   const tsMs=l=>(l.timestamp&&l.timestamp.seconds)?l.timestamp.seconds*1000:PENDING;
-  const sorted=[...allLogs].sort((a,b)=>tsMs(b)-tsMs(a));
+  // Guideline 1.2 blocking. Filtered at the FEED only — a blocked person still
+  // scores, still holds their rank, and still counts toward the team streak.
+  // Blocking is about what you have to read, not about erasing someone from a
+  // group they are legitimately part of; silently zeroing their points would
+  // corrupt everyone else's standings.
+  const sorted=[...allLogs]
+    .filter(l => typeof isBlocked !== 'function' || !isBlocked(groupCode, l.player))
+    .sort((a,b)=>tsMs(b)-tsMs(a));
   const tcol=t=>t==='A'?'var(--A)':t==='B'?'var(--B)':'var(--C)';
   const tbg=t=>t==='A'?'var(--Al)':t==='B'?'var(--Bl)':'var(--Cl)';
   const now=new Date();
@@ -5560,7 +6173,7 @@ function renderFeed(){
       <div style="font-size:10px;font-weight:700;color:${topTeam?tcol(topTeam):'var(--muted)'};text-transform:uppercase;letter-spacing:.5px;margin-top:2px">Leading today</div>
     </div>`}
     ${topStreakers.length>0?`<div style="background:var(--gold-l);border-radius:10px;padding:12px;text-align:center;grid-column:1/-1">
-      <div style="font-size:16px;font-weight:800;color:var(--orange)">${(function(){const d=topStreak+(topStreak===1?' day ':' days ')+flameIco('flk-m');return topStreakers.length<=3?topStreakers.map(p=>p.name).join(' · ')+' · '+d:'Multiple players · '+d;})()}</div>
+      <div style="font-size:16px;font-weight:800;color:var(--orange)">${(function(){const d=topStreak+(topStreak===1?' day ':' days ')+flameIco('flk-m');return topStreakers.length<=3?topStreakers.map(p=>esc(p.name)).join(' · ')+' · '+d:'Multiple players · '+d;})()}</div>
       <div style="font-size:10px;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">${topStreakers.length<=3?'Longest active streak':topStreakers.length+' players tied — check the board'}</div>
     </div>`:''}
   </div>`;
@@ -5611,6 +6224,7 @@ function renderFeed(){
         ${isMine?`<button class="fi-btn" title="Remove" onclick="deleteLog('${l.id}')"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-close"/></svg></button>`:''}
         ${!isMine&&window.FEATURE_REACTIONS_ENABLED?`<button class="fi-btn${iReacted?' on':''}" title="React" onclick="toggleReaction('${l.id}')">${mirBico('g-flame')}${rCount>0?`<span class="fi-rc">${rCount}</span>`:''}</button>`:''}
         ${!isMine&&!alreadyFlagged?`<button class="fi-btn" title="Flag" onclick="flagLog('${l.id}','${escForInlineJsAttr(l.player)}')"><svg class="mir-ico" viewBox="0 0 24 24"><use href="#i-flag"/></svg></button>`:''}
+        ${!isMine?`<button class="fi-btn" title="Block ${escForInlineJsAttr(l.player)}" onclick="blockFromFeed('${escForInlineJsAttr(l.player)}')">&#10005;&#65039;</button>`:''}
       </div>
       <div class="fi-ico" style="color:${ccol}">${mirBico(fico)}</div>
     </div>`;
@@ -5666,6 +6280,65 @@ async function deleteLog(id){
   try { await voidLogDoc(id, me.name); }
   catch(e){ logErr('deleteLog', e); toast('Remove failed — check connection.','error'); }
 }
+// Native share sheet where there is one. Falls back to Web Share, then the
+// clipboard, so the button always does something rather than silently failing
+// on a browser without navigator.share.
+async function shareInvite(code){
+  const text = 'Join my group on Forge. Group code: ' + code;
+  const r = await shareText('Join me on Forge', text, 'https://goforge.in');
+  if(r === 'clipboard') toast('Invite copied');
+  else if(r === 'failed') toast('Could not share', 'error');
+  if(r !== 'cancelled' && r !== 'failed') tap();
+}
+
+// ── BLOCKING (Guideline 1.2) ────────────────────────────────────────────────
+// Confirm first: a block is invisible to the other person and easy to do by
+// accident on a small action row, so it should never happen on a stray tap.
+function blockFromFeed(player){
+  if(!player || !groupCode) return;
+  if(!confirm('Hide everything from ' + player + ' in this group?\n\n'
+    + 'You will stop seeing their workouts in the feed. They are not told, '
+    + 'and their points and your team streak are unaffected.\n\n'
+    + 'You can undo this any time under Profile.')) return;
+  try{
+    blockPlayer(groupCode, player);
+    tap('warning');
+    toast(player + ' hidden from your feed');
+    renderFeed();
+    renderBlockedCard();
+  }catch(e){ logErr('blockFromFeed', e); }
+}
+
+function unblockFromProfile(player){
+  try{
+    unblockPlayer(groupCode, player);
+    toast(player + ' unhidden');
+    renderBlockedCard();
+    renderFeed();
+  }catch(e){ logErr('unblockFromProfile', e); }
+}
+
+// The manage-list half of the requirement: blocking is only humane if it is
+// visible and reversible from one place.
+function renderBlockedCard(){
+  const hdr = document.getElementById('blockedShdr');
+  const el  = document.getElementById('blockedCard');
+  if(!el || !hdr) return;
+  const list = (typeof blockedIn === 'function' && groupCode) ? blockedIn(groupCode) : [];
+  if(!list.length){ hdr.style.display='none'; el.style.display='none'; return; }
+  hdr.style.display=''; el.style.display='';
+  el.innerHTML =
+    '<div class="tmuted" style="font-size:12px;margin-bottom:10px">'
+    + 'Hidden from your feed in this group. They keep their points and still '
+    + 'count toward the team streak — you just do not see their posts.</div>'
+    + list.map(n =>
+        '<div class="row" style="padding:9px 0;border-bottom:1px solid var(--border)">'
+        + '<div style="font-size:14px">' + esc(n) + '</div>'
+        + '<button class="fi-btn" style="width:auto;padding:4px 12px;font-size:12px" '
+        + 'onclick="unblockFromProfile(\'' + escForInlineJsAttr(n) + '\')">Unhide</button>'
+        + '</div>').join('');
+}
+
 async function flagLog(logId,player){
   if(!confirm(`Flag ${player}'s workout as suspicious?`)) return;
   await db.collection('flags').add({groupCode,logId,player,flaggedBy:me.name,month:season.month,year:season.year,timestamp:firebase.firestore.FieldValue.serverTimestamp()});
@@ -5828,6 +6501,13 @@ async function renamePlayer(oldName){
   const newName = String(raw).trim().replace(/\s+/g,' ');
   if(!newName || newName===oldName) return;
   if(newName.length>24){ toast('Names are limited to 24 characters.','error'); return; }
+  // Same character class registerAndJoin enforces. This path only checked
+  // LENGTH, so an admin could plant a name like `<svg onload=...>` straight
+  // into the roster — which then rendered unescaped in the feed's top-streak
+  // tile. The sink is fixed too, but a roster name should never have been able
+  // to carry markup in the first place.
+  if(newName.length < 2){ toast('Names must be at least 2 characters.','error'); return; }
+  if(/[^\p{L}\p{N} .\-]/u.test(newName)){ toast('Name can only contain letters, numbers, spaces, hyphens and periods — no symbols.','error'); return; }
   if((season.roster||[]).some(p=>p.name.toLowerCase()===newName.toLowerCase() && p.name!==oldName)){
     toast(`"${newName}" is already taken in this group.`,'error'); return;
   }
@@ -5905,22 +6585,35 @@ async function resetPlayerPin(name){
   if(!confirm(`Reset ${name}'s PIN? They'll set a new one next time they log in.`)) return;
   const sRef = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
   try {
-    let written=null, clearedUserId=null;
+    let written=null, clearedUserId=null, wasLinked=false;
     await db.runTransaction(async tx=>{
       const snap=await tx.get(sRef);
       if(!snap.exists) throw new Error('SEASON_MISSING');
       const roster=snap.data().roster||[];
       const entry=roster.find(p=>p.name===name);
       if(!entry) throw new Error('NO_RECORD');
+      clearedUserId=entry.userId||null;
+      // A player who secured their account with Google has no PIN to reset —
+      // and once the users-doc ownership rule is live (AUTH_PHASE2_NOTES),
+      // writing pinHash:null on their doc from an admin's client is BLOCKED.
+      // So detect the link inside the transaction and skip the user-doc write;
+      // there is nothing to clear and attempting it would just error.
+      let linkedDoc=null;
+      if(clearedUserId){
+        const uSnap=await tx.get(db.collection('users').doc(clearedUserId));   // all reads first
+        linkedDoc = uSnap.exists && uSnap.data().authUid ? uSnap : null;
+      }
+      wasLinked = !!linkedDoc;
+      if(wasLinked) return;   // Google account — no PIN exists; leave roster + user doc untouched
       entry.pin=null;
       entry.pinSet=false;   // clear the credential sentinel → next login routes to grace
-      clearedUserId=entry.userId||null;
       tx.update(sRef,{roster});
       if(clearedUserId){
         tx.update(db.collection('users').doc(clearedUserId), {pinHash:null});
       }
       written=roster;
     });
+    if(wasLinked){ toast(`${name} signs in with Google — there's no PIN to reset.`,'default'); return; }
     if(written){ season.roster=written; }
     renderAdminRoles();
     toast(`${name}'s PIN has been reset.`,'success');
@@ -6318,7 +7011,25 @@ async function loadSuperAdmin(){
       el.textContent=`Season will be ${MN[m-1]} ${y} (${seasonIdOf(m,y)}), ${new Date(y,m,0).getDate()} days — taken from today's date.`;
     }
   }catch(e){ logErr('newGroupSeasonNote', e); }
-  const snap=await db.collection('groups').get();
+  // This read was unguarded, and everything on the page hangs off it. When the
+  // local Firebase state is wedged the promise rejects, loadSuperAdmin throws,
+  // and NOTHING below runs — no dashboard, no rollover nudges, no group list,
+  // not even the "No groups yet" fallback. The result is a page rendered as
+  // bare headings with no error anywhere, which reads as "my data is gone"
+  // rather than "the connection is stuck" (seen live, 17 Aug 2026).
+  // Fail loudly and point at the recovery that already exists instead.
+  let snap;
+  try {
+    snap = await db.collection('groups').get();
+  } catch(e){
+    logErr('loadSuperAdmin: groups read failed', e);
+    const list = document.getElementById('superGroupList');
+    if(list) list.innerHTML = '<div class="warn-box warn-red">Could not load groups — the connection to the server is stuck. '
+      + '<span onclick="confirmConnReset()" style="text-decoration:underline;cursor:pointer;font-weight:700">Fix connection</span>, '
+      + 'or reload the page. Nothing has been lost.</div>';
+    toast('Could not load groups — connection stuck.','error');
+    return;
+  }
   const groups=snap.docs.map(d=>({code:d.id,...d.data()}));
 
   // ── Cockpit dashboard (5 sections + month selector + drill-down) ──
@@ -6665,6 +7376,15 @@ async function writeSeasonSnapshot(code){
   const _dim = sData.days || new Date(year, month, 0).getDate();
   const _dcByPlayer = {};
   logs.forEach(l=>{ if(!l.player || !l.day || l.day<1 || l.day>_dim) return; const arr=_dcByPlayer[l.player]||(_dcByPlayer[l.player]=new Array(_dim).fill(0)); arr[l.day-1]+=(Array.isArray(l.workouts)?l.workouts.length:1); });
+  // FEATURE_SERVER_WRITES splits this loop (AUTH_PHASE2_NOTES.md). The archive
+  // subcollection doc is ALWAYS a client write — its rule is create-only and
+  // owner-agnostic, so the ownership rule never touches it. The parent-doc
+  // stat/badge INCREMENT is the one write that fails against a linked player
+  // under `request.auth.uid == authUid`; when server-writes are on it moves to
+  // the awardSeasonBadges Function (called after commit), which reads the same
+  // badges from this very season doc. When off, the legacy in-batch increment
+  // runs exactly as before.
+  const _serverWrites = !!window.FEATURE_SERVER_WRITES;
   finalStandings.forEach(e=>{
     if(!e.userId) return; // unmigrated entry — nothing to archive against yet
     const badges = (badgesAwarded.find(b=>b.name===e.name)||{}).badges||[];
@@ -6674,16 +7394,28 @@ async function writeSeasonSnapshot(code){
       rank:e.rank, total:e.total, wo:e.wo, streak:e.streak, team:e.team, teamRank, rosterSize:roster.length,
       badges, dayCounts: _dcByPlayer[e.name] || new Array(_dim).fill(0)
     });
-    const badgeCountFields = {};
-    badges.forEach(b=>{ badgeCountFields[`stats.badgeCounts.${b}`] = firebase.firestore.FieldValue.increment(1); });
-    batch.update(db.collection('users').doc(e.userId), {
-      'stats.seasonsPlayed': firebase.firestore.FieldValue.increment(1),
-      ...badgeCountFields
-    });
+    if(!_serverWrites){
+      const badgeCountFields = {};
+      badges.forEach(b=>{ badgeCountFields[`stats.badgeCounts.${b}`] = firebase.firestore.FieldValue.increment(1); });
+      batch.update(db.collection('users').doc(e.userId), {
+        'stats.seasonsPlayed': firebase.firestore.FieldValue.increment(1),
+        ...badgeCountFields
+      });
+    }
     archivesWritten++;
   });
 
   await batch.commit();
+
+  // Server-side increments: the snapshot (snapshotAt, finalStandings,
+  // badgesAwarded) is now committed, so awardSeasonBadges has its source of
+  // truth. Idempotent + resumable — a failure here leaves standings intact and
+  // the next call (or the stats backfill) reconciles; it must never throw the
+  // rollover itself, which has already succeeded.
+  if(_serverWrites){
+    try { await callFunction('awardSeasonBadges', { groupCode: code, sid }); }
+    catch(e){ logErr('awardSeasonBadges', e); }
+  }
   return { skipped:false, finalStandings, teamStandings, badgesAwarded, archivesWritten };
 }
 
@@ -6969,6 +7701,11 @@ async function runUserMigration(dryRun){
   const log = (msg) => { console.log('[Migration] '+msg); if(statusEl) statusEl.textContent = msg; };
 
   if(!dryRun){
+    // Once the users-doc ownership rule is live (FEATURE_SERVER_WRITES era),
+    // a browser client can no longer write a LINKED user's doc, so this bulk
+    // pass would half-fail across the collection. Dry-run/preview stays open;
+    // the live write must run from scripts/ with owner credentials.
+    if(window.FEATURE_SERVER_WRITES){ log('Ownership rule is live — run this from scripts/ with owner credentials, not the browser.'); return; }
     if(!window._migrationDryRunDone){ log('Run a dry-run first — see console for the plan.'); return; }
     if(!confirm('This WRITES real users/{userId} docs and updates roster entries across ALL groups. You have reviewed a dry run. Continue?')){ log('Cancelled — nothing written.'); return; }
   }
@@ -7181,6 +7918,9 @@ async function runStatsBackfill(dryRun){
   const statusEl = document.getElementById('backfillStatus');
   const log = (msg) => { console.log('[Backfill] '+msg); if(statusEl) statusEl.textContent = msg; };
   if(!dryRun){
+    // See runUserMigration: the ownership rule blocks client writes to linked
+    // user docs, so the live bulk backfill moves to scripts/ with owner creds.
+    if(window.FEATURE_SERVER_WRITES){ log('Ownership rule is live — run this from scripts/ with owner credentials, not the browser.'); return; }
     if(!window._backfillDryRunDone){ log('Run a dry-run first — see console for the plan.'); return; }
     if(!confirm('This OVERWRITES stats (totalWorkouts, longest/currentStreak, lastLoggedDay, seasonsPlayed, monthsLogged/monthsList) on ALL users docs, recomputed from real logs. Badges untouched. Idempotent — safe to re-run. Continue?')){ log('Cancelled — nothing written.'); return; }
   }
@@ -7276,20 +8016,31 @@ function downloadJSON(obj, filename){
 }
 
 // ── S3 §4.2 SELF-SERVE GROUP CREATION — DARK LAUNCH ─────────────────────────
-// Reachable only from screen-create, itself reachable only via ?create (see
-// bootApp). Fixed defaults, no config UI — self-serve means dead simple:
-// roles off, 2 teams, minWorkouts 8, days auto-computed (never prompted,
-// same pattern as the auto-rollover fix). Creator becomes the first roster
-// entry AND isAdmin:true — the entire point of self-serve is that nobody
-// needs Nirag to grant admin access to their own new group. Routes into the
-// EXISTING grace-flow PIN step afterward — same machinery every other
-// first-PIN-set uses, including S1's self-heal (the entry has no userId yet,
-// so submitNewPin's grace branch creates one automatically).
+// FOUNDER-GROUP creation, reachable from onboarding's #founderDoor and the
+// legacy ?create deep link. Fixed defaults, no config UI — self-serve means
+// dead simple: roles off, numTeams 1 (a founder group works alone from day
+// one; isSoloMode() gates all team UI until Admin splits it at ~6), a
+// minWorkouts pro-rated to the days remaining, days auto-computed (never
+// prompted, same pattern as the auto-rollover fix). Creator becomes the
+// first roster entry AND isAdmin:true — nobody needs Nirag to grant admin
+// on their own new group. Routes into the EXISTING grace-flow PIN step
+// afterward (founder:true unlocks the skip affordance) — same machinery
+// every other first-PIN-set uses, including S1's self-heal (the entry has
+// no userId yet, so submitNewPin's grace branch creates one automatically).
 async function selfServeCreateGroup(){
   const groupNameInput = document.getElementById('ssGroupName');
   const creatorNameInput = document.getElementById('ssCreatorName');
   const err = document.getElementById('ssError');
   err.classList.add('hidden');
+
+  // Per-device sanity throttle — NOT a security control (scripted abuse is
+  // App Check's job, gated at promotion); this catches double-taps and
+  // casual junk. Two creations per rolling 24h.
+  try {
+    const hist = JSON.parse(localStorage.getItem('forge_created_groups')||'[]').filter(t=>Date.now()-t < 86400000);
+    localStorage.setItem('forge_created_groups', JSON.stringify(hist));
+    if(hist.length >= 2){ err.textContent='Two groups in one day is plenty. The forge reopens tomorrow.'; err.classList.remove('hidden'); return; }
+  } catch(e){}
 
   const groupName = groupNameInput.value.trim();
   if(!groupName || groupName.length>40){ err.textContent='Enter a group name (up to 40 characters).'; err.classList.remove('hidden'); return; }
@@ -7319,6 +8070,11 @@ async function selfServeCreateGroup(){
   const month = now.getMonth()+1, year = now.getFullYear();
   const sid = seasonIdOf(month, year);
   const days = new Date(year, month, 0).getDate(); // auto-computed, never prompted
+  // Pro-rate the month-end minimum to the days actually left: a founder
+  // arriving on the 25th must not inherit a penalty sized for people who had
+  // all 31 days. Full month ⇒ the standard 8; floor 1; never above 8.
+  const daysLeft = days - now.getDate() + 1;
+  const minW = Math.max(1, Math.min(8, Math.round(8 * daysLeft / days)));
 
   const creatorEntry = { name: formattedName, team:'A', role:'Player', uid:(window.currentUid||null), isAdmin:true };  // R2: no plaintext pin field; pinHash set via grace-flow
   const serverNow = firebase.firestore.FieldValue.serverTimestamp();
@@ -7329,8 +8085,8 @@ async function selfServeCreateGroup(){
     const seasonRef = groupRef.collection('seasons').doc(sid);
     batch.set(seasonRef, {
       month, year, days,
-      capTarget: 16, vcTarget: 20, minWorkouts: 8,
-      numTeams: 2, teamStreakThreshold: 0.6,
+      capTarget: 16, vcTarget: 20, minWorkouts: minW,
+      numTeams: 1, teamStreakThreshold: 0.6,
       rolesEnabled: false,
       roster: [creatorEntry],
       status: 'active', startedAt: serverNow, endedAt: null
@@ -7338,26 +8094,143 @@ async function selfServeCreateGroup(){
     await batch.commit();
 
     groupCode = code;
-    groupData = { name: groupName, players:[{name:formattedName}], currentSeasonId: sid };
-    season = { month, year, days, capTarget:16, vcTarget:20, minWorkouts:8, numTeams:2, teamStreakThreshold:0.6, rolesEnabled:false, roster:[creatorEntry], status:'active' };
+    groupData = { name: groupName, players:[{name:formattedName}], currentSeasonId: sid, createdAt: new Date() };
+    season = { month, year, days, capTarget:16, vcTarget:20, minWorkouts:minW, numTeams:1, teamStreakThreshold:0.6, rolesEnabled:false, roster:[creatorEntry], status:'active' };
     seasonId = sid;
 
-    const waText = encodeURIComponent(`Join my Forge group "${groupName}"! Code: ${code}\nhttps://goforge.in/`);
-    const waLink = `https://wa.me/?text=${waText}`;
-    document.getElementById('ssResult').innerHTML = `✅ Group created! Code: <strong style="font-size:20px;letter-spacing:3px">${esc(code)}</strong><br><a href="${waLink}" target="_blank" rel="noopener" style="color:var(--green)">📱 Share on WhatsApp</a>`;
-    document.getElementById('ssResult').classList.remove('hidden');
+    try { const hist=JSON.parse(localStorage.getItem('forge_created_groups')||'[]'); hist.push(Date.now()); localStorage.setItem('forge_created_groups', JSON.stringify(hist)); } catch(e){}
+    // Strip a ?create deep-link param so reloads boot into the group, not
+    // back into this form.
+    try { if(location.search.includes('create')) history.replaceState(null, '', location.pathname); } catch(e){}
 
-    window._pinFlow = { mode:'grace', name: formattedName };
+    // The old flow rendered the code + a share link into ssResult and then
+    // switched screens on the same tick — the founder never actually saw
+    // their code. It now rides the PIN step's subtitle and lives permanently
+    // on the Home founder card (renderFounderCard), where the share loop is.
+    window._pinFlow = { mode:'grace', name: formattedName, founder:true };
     showScreen('onboard');
-    document.getElementById('ob-s3-sub').textContent = `Welcome, ${formattedName}. Pick a 4-digit PIN to secure your account.`;
+    document.getElementById('ob-s3-sub').innerHTML = `“${esc(groupName)}” is live — code <strong style="letter-spacing:2px;color:var(--gold)">${esc(code)}</strong> (it'll be on your home screen too).<br>Pick a 4-digit PIN so the name ${esc(formattedName)} stays yours once the code is shared.`;
     document.getElementById('pinInput').value=''; document.getElementById('pinConfirm').value='';
     document.getElementById('pinError').classList.add('hidden');
+    document.getElementById('pinSkip').classList.remove('hidden');
+    document.getElementById('pinBack')?.classList.add('hidden');   // brand-new group: no prior session to return to
     showObStep(3);
   } catch(e){
     logErr('selfServeCreateGroup', e);
     err.textContent='Failed to create group — check connection.';
     err.classList.remove('hidden');
   }
+}
+
+// ── FOUNDER CARD (Home) ──────────────────────────────────────────────────
+// The invite loop for solo groups (numTeams 1). Framing rule — the reason
+// this card exists at all: alone is day zero of a group, not a destination.
+// Its whole job is the code, the share, and the countdown to teams. Data-
+// gated on the season's own numTeams; every 2/3-team group renders nothing.
+function renderFounderCard(){
+  const el=document.getElementById('founderCard'); if(!el) return;
+  const solo=(typeof isSoloMode==='function' && isSoloMode());
+  if(!solo || !groupCode || !season){ el.innerHTML=''; return; }
+  const roster=season.roster||[];
+  const n=roster.length;
+  const mine=roster.find(p=>p && me && p.name===me.name) || me || {};
+  if(n>=6){
+    // Six is the first fair split (3v3). The card's job is done — hand the
+    // moment to the admin and get out of the way.
+    el.innerHTML = mine.isAdmin ? `
+      <div class="card" style="border:1px solid var(--gold)">
+        <div class="card-title" style="color:var(--gold)">Six strong. The solo era is over.</div>
+        <div class="tmuted" style="margin-bottom:10px">Split into teams and let the streak pressure do its work — set teams to 2 in Admin, then balance the rosters.</div>
+        <button class="btn btn-surface btn-sm" style="margin:0;width:100%" onclick="showTab('admin')">Open Admin</button>
+      </div>` : '';
+    return;
+  }
+  const noCred = !mine.pin && !mine.pinSet;
+  let young=false;
+  try { const c=groupData && groupData.createdAt; const d=c && (c.toDate ? c.toDate() : new Date(c)); young=!!d && (Date.now()-d.getTime()) < 8*86400000; } catch(e){}
+
+  // THE CODE IS WITHHELD UNTIL THERE IS A CREDENTIAL, and this is a security
+  // control, not a nag. A founder who skipped their PIN has a roster entry with
+  // no pin and no pinSet — which is exactly the state choosePlayer reads as
+  // "no credential yet, send them to the grace flow". So anyone who has the
+  // code can pick the founder's name, set ANY PIN, and inherit the group's
+  // only admin account. Previously this card handed them the code on a gold
+  // button while the warning sat underneath as a small grey link.
+  //
+  // Withholding the code closes the window completely rather than relying on
+  // the founder reading a nudge. Nothing else about the card changes, so a
+  // founder who sets a PIN gets the full invite loop immediately.
+  if(noCred){
+    el.innerHTML = `
+      <div class="card" style="border:1px solid var(--gold)">
+        <div class="card-title" style="color:var(--gold)">Lock your name first</div>
+        <div class="tmuted" style="margin-bottom:10px">Your group code is ready — but until you set a 4-digit PIN, anyone who gets the code could pick your name and take over the group. Takes ten seconds.</div>
+        <button class="btn btn-gold btn-sm" style="margin:0;width:100%" onclick="founderSetPin()">Set my PIN</button>
+        <div style="margin-top:8px;font-size:11px;color:var(--muted);text-align:center">Then you can share the code and start pulling people in.</div>
+      </div>`;
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="card" style="border:1px solid var(--gold)">
+      <div class="card-title" style="color:var(--gold)">${n===1?'A forge of one':esc(String(n))+' strong'}</div>
+      <div class="tmuted" style="margin-bottom:10px">${n===1?'Your points count from the first log. Rivals are what make them mean something.':'The fire spreads. Keep it moving.'}</div>
+      <div onclick="founderCopyCode()" title="Tap to copy" style="cursor:pointer;text-align:center;padding:12px;border:1px dashed var(--border);border-radius:8px;margin-bottom:10px">
+        <div style="font-size:10px;color:var(--muted);letter-spacing:1px">GROUP CODE — TAP TO COPY</div>
+        <div style="font-size:26px;font-weight:800;letter-spacing:6px;color:var(--gold)">${esc(groupCode)}</div>
+      </div>
+      <button class="btn btn-gold btn-sm" style="margin:0;width:100%" onclick="founderShare()">Share the code</button>
+      <div style="margin-top:8px;font-size:11px;color:var(--muted);text-align:center">${n} of 6 — teams unlock at 6</div>
+      ${young?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--muted)">Week one: try three different workout types. The people who do almost never quit.</div>`:''}
+    </div>`;
+}
+
+function founderCopyCode(){
+  try {
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(groupCode).then(()=>toast('Code copied — go start something.'), ()=>toast('Code: '+groupCode));
+      return;
+    }
+  } catch(e){}
+  toast('Code: '+groupCode);
+}
+
+async function founderShare(){
+  const msg=`Join my Forge group "${groupData?.name||groupCode}" — code ${groupCode}. https://goforge.in/`;
+  // Native share where it exists; WhatsApp (where every Forge group already
+  // lives) as the fallback. AbortError = user closed the sheet, not an error.
+  try { if(navigator.share){ await navigator.share({text:msg}); return; } }
+  catch(e){ if(e && e.name==='AbortError') return; }
+  window.open('https://wa.me/?text='+encodeURIComponent(msg), '_blank', 'noopener');
+}
+
+// Re-enter the existing grace PIN flow from the founder card. submitNewPin's
+// grace branch already handles an entry that has a userId (merge-writes the
+// hash onto the same users doc) — no new machinery, no second identity.
+function founderSetPin(){
+  if(!me) return;
+  window._pinFlow = { mode:'grace', name: me.name };
+  document.getElementById('ob-s3-sub').textContent = `Pick a 4-digit PIN so the name ${me.name} stays yours once the code is shared.`;
+  document.getElementById('pinInput').value=''; document.getElementById('pinConfirm').value='';
+  document.getElementById('pinError').classList.add('hidden');
+  document.getElementById('pinSkip')?.classList.add('hidden');
+  // The founder is already inside the app, so there IS somewhere to go back to.
+  document.getElementById('pinBack')?.classList.remove('hidden');
+  showScreen('onboard');
+  showObStep(3);
+}
+
+// Leave the PIN step without setting one. Only reachable when a live session
+// exists (founderSetPin unhides the link; every other entry to step 3 hides
+// it), so this always has a group to return to.
+function cancelPinStep(){
+  window._pinFlow = null;
+  document.getElementById('pinBack')?.classList.add('hidden');
+  const sessions = getSessions();
+  const active = sessions.find(s=>s.code===getActiveCode()) || sessions[0];
+  if(!active){ showScreen('onboard'); showObStep(1); return; }
+  groupCode = active.code; me = active.player; setActiveCode(active.code);
+  loadGroup(groupCode, true);
 }
 
 // Helper: YYYY-MM-DD stamp for filenames.
@@ -7433,7 +8306,8 @@ async function createGroup(){
 
   const res=document.getElementById('newGroupResult');
   res.className='warn-box warn-green';
-  res.innerHTML=`✅ Group created! Code: <strong style="font-size:20px;letter-spacing:3px">${code}</strong><br>Share this code with your group members.`;
+  res.innerHTML=`✅ Group created! Code: <strong style="font-size:20px;letter-spacing:3px">${code}</strong><br>Share this code with your group members.`
+      + `<button class="btn btn-gold" style="margin-top:10px" onclick="shareInvite('${code}')">Share invite</button>`;
   res.classList.remove('hidden');
   loadSuperAdmin();
 }
@@ -7622,7 +8496,7 @@ function renderGlobalFromCache({groups,todayByGroup}){
   const top=playerEntries.slice(0,5);
   ptsEl.innerHTML=top.length===0
     ?'<div class="tmuted">No one has opted in yet. Turn on "Show me on the global leaderboard" on your Home screen to appear here.</div>'
-    :top.map((e,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(e.name)}</div><div class="lbmeta">${esc(e.group)}${e.groups>1?` · best of ${e.groups}`:''}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${e.points}</div><div style="font-size:10px;color:var(--muted)">pts</div></div></div>`).join('');
+    :top.map((e,i)=>`<div class="lbrow"><div class="lbrank ${i===0?'r1':i===1?'r2':i===2?'r3':''}">${i+1}</div><div class="lbinfo"><div class="lbname">${esc(e.name)}</div><div class="lbmeta">${esc(e.group)}${e.groups>1?` · best of ${e.groups}`:''}</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:800;color:var(--gold)">${esc(e.points)}</div><div style="font-size:10px;color:var(--muted)">pts</div></div></div>`).join('');
 }
 
 // R3 BACKFILL — one-time seed of the denormalized rollups from live data using
@@ -8128,7 +9002,7 @@ async function showTab(t){
   document.querySelectorAll('.tab')[TABS.indexOf(t)]?.classList.add('active');
   updateTabPill(t);
   window.scrollTo(0,0);
-  if(navigator.vibrate) navigator.vibrate(8);
+  tap();
   if(t==='global') loadGlobal();
   if(t==='pledge') renderIronPledgePage();
   if(t==='profile') renderProfile();

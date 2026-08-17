@@ -22,14 +22,89 @@ const STAGING_CFG = {
 };
 // ⬆️⬆️ -------------------------------------------------------------- ⬆️⬆️
 
-const IS_STAGING =
+// NATIVE FIRST — this check has to come before the hostname one, and the
+// reason is a live footgun found the first time the iOS app booted.
+//
+// Capacitor serves the BUNDLED app from https://localhost. The hostname test
+// below reads that as "a developer's machine" and hands back the STAGING
+// config, so every iOS user would have been reading and writing the test
+// database while the orange STAGING banner sat at the bottom of the screen.
+// It fails silently and it fails for everyone.
+//
+// A native build is always production. If a staging build of the app is ever
+// wanted, it needs its own bundle id and an explicit flag — never an accident
+// of which URL scheme Capacitor happened to choose.
+//
+// No-op on the web: window.Capacitor is undefined in every browser, so the
+// hostname logic below is reached unchanged.
+const IS_NATIVE = !!(window.Capacitor && (
+  (typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform())
+  || window.Capacitor.platform === 'ios'
+  || window.Capacitor.platform === 'android'
+));
+window.IS_NATIVE = IS_NATIVE;
+
+const IS_STAGING = !IS_NATIVE && (
   location.hostname === 'localhost' ||
   location.hostname === '127.0.0.1' ||
-  location.pathname.includes('forge-staging');
+  location.pathname.includes('forge-staging')
+);
 window.IS_STAGING = IS_STAGING;
 const FB_CFG = IS_STAGING ? STAGING_CFG : PROD_CFG;
 
 firebase.initializeApp(FB_CFG);
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   APP CHECK — SECURITY_REDTEAM.md rank 4, "the single highest-value security
+   change available right now" (AUTH_PHASE2_NOTES).
+
+   WHAT IT STOPS. Every attack the red team actually landed was a plain fetch
+   carrying the public API key, with no browser and no app: reading all 66
+   names, creating 25 errorLogs docs in 376 ms, scripted mass-delete attempts.
+   App Check attests that a request comes from THIS app on a real device, so
+   all of that stops working. WHAT IT DOES NOT STOP: a determined person
+   driving the real app in a real browser — App Check attests the app, not the
+   user. That is the identity layer's job (claimIdentity + ownership rules).
+
+   INERT UNTIL CONFIGURED. Needs one console step per project that no agent
+   can do: App Check → register the web app → reCAPTCHA v3 → site key. With
+   RECAPTCHA_SITE_KEY empty this whole block no-ops, so it ships safely ahead
+   of the console work. Enforcement is a SEPARATE console toggle: register
+   first, watch the App Check dashboard for unverified traffic, and only then
+   enforce — flipping both at once can lock out a client you forgot about.
+
+   ⚠️ SCRIPTS: gcloud OWNER_TOKEN scripts (manual-log, scrub-*, seed-*,
+   ranking-cards) use Google Cloud IAM credentials and BYPASS App Check
+   entirely — they need nothing. But scripts/forge-daily.mjs signs in
+   anonymously with the PUBLIC API KEY, which is exactly the shape App Check
+   blocks: enforcing App Check WILL break the daily brief + backups until it
+   either moves to an OWNER_TOKEN or gets a registered debug token. Decide
+   before flipping enforcement, not after.
+   ═══════════════════════════════════════════════════════════════════════════ */
+const RECAPTCHA_SITE_KEY = {
+  'forge-staging-865ff': '',   // ⬅️ paste the staging reCAPTCHA v3 site key
+  'forge-25c8c':         ''    // ⬅️ prod key — set only at the prod promotion
+}[FB_CFG.projectId] || '';
+
+window.APP_CHECK_READY = false;
+if(RECAPTCHA_SITE_KEY && typeof firebase !== 'undefined' && firebase.appCheck){
+  try{
+    // Debug provider for local dev: prints a token to the console to register
+    // under App Check → Manage debug tokens. Without this, localhost cannot
+    // pass attestation and every read fails once enforcement is on.
+    if(location.hostname === 'localhost' || location.hostname === '127.0.0.1'){
+      self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+    }
+    firebase.appCheck().activate(RECAPTCHA_SITE_KEY, true);   // true = auto-refresh
+    window.APP_CHECK_READY = true;
+  }catch(e){
+    // Never let attestation setup break boot — an unattested client still
+    // works until enforcement is switched on, and a hard failure here would
+    // take the whole app down for everyone.
+    console.warn('[Forge] App Check activation failed:', e && e.message);
+  }
+}
+
 const db = firebase.firestore();
 // Cache reads in IndexedDB so a returning session gets a resume-token delta
 // sync instead of re-billing the whole result set (~85-90% fewer reads on the
@@ -280,13 +355,28 @@ window.googleProvider = function(){
 
 // Start the flow. Returns a promise that rejects if the provider is not enabled
 // yet, so the caller can show a real message instead of a dead button.
-window.startGoogleSignIn = function(){
+// intent: 'link'  — securing the identity you are already using on this device
+//         'login' — arriving on a NEW device to reclaim an identity you own
+//
+// The intent has to be passed in, because the two need OPPOSITE calls and the
+// old code could only ever make one of them. ensureAuth() establishes an
+// anonymous session before any screen paints, so `currentUser.isAnonymous` is
+// ALWAYS true by the time either button is tappable — meaning login took the
+// link branch too. On a second device that Google credential is already bound
+// to the first device's uid, so linking fails with credential-already-in-use
+// and the user is told their own account belongs to someone else. "Continue
+// with Google" could never once have succeeded.
+window.startGoogleSignIn = function(intent){
   if(!window.FEATURE_GOOGLE_AUTH) return Promise.reject(new Error('FEATURE_OFF'));
   try{ sessionStorage.setItem('forge_google_pending','1'); }catch(e){}
   const cur = auth.currentUser;
-  if(cur && cur.isAnonymous){
-    return cur.linkWithRedirect(window.googleProvider());
-  }
+  // LOGIN: sign in AS the Google account outright. Discarding this device's
+  // throwaway anonymous uid is the whole point — the identity being reclaimed
+  // lives on the server, keyed by authUid.
+  if(intent === 'login') return auth.signInWithRedirect(window.googleProvider());
+  // LINK: upgrade this device's existing anonymous uid in place, so anything
+  // already written under it (knownDeviceUids, logs) stays attached.
+  if(cur && cur.isAnonymous) return cur.linkWithRedirect(window.googleProvider());
   return auth.signInWithRedirect(window.googleProvider());
 };
 
@@ -308,7 +398,13 @@ window.consumeGoogleRedirect = async function(){
     // Linking is refused on purpose (one Google account = one identity, Q2),
     // so sign in as that identity instead of pretending the link worked.
     if(err && err.code === 'auth/credential-already-in-use'){
-      return { linked:false, error:'ALREADY_IN_USE', pending };
+      // Hand the credential BACK. This is not really a failure: it means the
+      // Google account already owns a Forge identity, which is precisely the
+      // 1:1 rule working. The old code threw err.credential away and left the
+      // caller with nothing but an error string, so the only possible outcome
+      // was telling the user their own account belonged to someone else.
+      // With the credential, signInAsGoogle() below completes the journey.
+      return { linked:false, error:'ALREADY_IN_USE', pending, credential: (err.credential || null) };
     }
     if(err && err.code === 'auth/operation-not-allowed'){
       return { linked:false, error:'PROVIDER_DISABLED', pending };
@@ -316,6 +412,28 @@ window.consumeGoogleRedirect = async function(){
     console.error('Google redirect failed:', err);
     return { linked:false, error: (err&&err.code)||'UNKNOWN', pending };
   }
+};
+
+// Complete a sign-in from a credential handed back by a refused link. Resolves
+// to the signed-in uid so the caller can look the identity up by authUid.
+window.signInAsGoogle = async function(credential){
+  if(!credential) throw new Error('NO_CREDENTIAL');
+  const res = await auth.signInWithCredential(credential);
+  return { uid: res.user.uid, email: res.user.email || null };
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CALLABLE CLOUD FUNCTIONS — AUTH PHASE 2 (claimIdentity, awardSeasonBadges,
+   adminResetPin). Region asia-south1, matching Firestore + the deployed
+   functions. Rejects with FUNCTIONS_SDK_MISSING if the compat SDK didn't load,
+   so callers surface a real error instead of a silent no-op. Returns the
+   function's `data` payload directly.
+   ═══════════════════════════════════════════════════════════════════════════ */
+window.callFunction = function(name, data){
+  if(typeof firebase === 'undefined' || !firebase.functions){
+    return Promise.reject(new Error('FUNCTIONS_SDK_MISSING'));
+  }
+  return firebase.app().functions('asia-south1').httpsCallable(name)(data || {}).then(r => r.data);
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -445,6 +563,34 @@ function _isTimeoutErr(e){ return !!(e && e.code === 'timeout'); }
 // reload. Boot mints fresh anon auth; user lands on group-code → name → PIN.
 window.fixLocalState = async function(reason){
   try { console.warn('[Forge] fixLocalState running. Reason:', reason); } catch(e){}
+
+  // THE ONE GUARANTEE: this function always ends in a reload.
+  //
+  // Every step below awaits Firebase internals — and this runs at precisely
+  // the moment those internals are wedged, which is the one condition where
+  // db.terminate() / clearPersistence() / signOut() can hang forever. They had
+  // no timeouts, so a single hang left the button stuck on "Fixing… ~30s" and
+  // the reload at step 7 never ran: the recovery path was defeated by the
+  // fault it exists to recover from. Observed live, 17 Aug 2026.
+  //
+  // A partial clean-up followed by a reload beats a perfect clean-up that
+  // never arrives — the reload alone clears most wedges, and step 4b's direct
+  // IndexedDB purge (which always had its own timeouts) does the heavy lifting.
+  var _reloaded = false;
+  var _reload = function(){
+    if(_reloaded) return; _reloaded = true;
+    try { location.reload(); } catch(e){ try { location.href = location.pathname; } catch(e2){} }
+  };
+  setTimeout(_reload, 9000);   // hard watchdog — fires no matter what stalls
+
+  // Cap any promise so one wedged call can't stall the chain. Never rejects:
+  // a timed-out step is logged and skipped, exactly like a caught error.
+  var _cap = function(p, ms, label){
+    return Promise.race([
+      Promise.resolve(p).catch(function(e){ console.warn('[Forge] fixLocalState '+label+':', e); }),
+      new Promise(function(res){ setTimeout(function(){ console.warn('[Forge] fixLocalState '+label+' timed out after '+ms+'ms — continuing'); res(); }, ms); })
+    ]);
+  };
   // 1. unregister service workers (kills the stale SW controlling the page)
   try {
     if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
@@ -457,12 +603,11 @@ window.fixLocalState = async function(reason){
     if (window.caches) { const keys = await caches.keys(); await Promise.all(keys.map(k => caches.delete(k).catch(()=>{}))); }
   } catch(e){ console.warn('[Forge] fixLocalState step2 (caches):', e); }
   // 3. terminate Firestore (must precede clearPersistence)
-  try { await db.terminate(); } catch(e){ console.warn('[Forge] fixLocalState step3 (terminate):', e); }
+  await _cap(db.terminate(), 2500, 'step3 (terminate)');
   // 4. clear the poisoned offline persistence. 'failed-precondition' = another
   //    tab still holds it — log and continue; the IndexedDB purge (below) and
   //    reload still recover this tab.
-  try { await db.clearPersistence(); }
-  catch(e){ console.warn('[Forge] fixLocalState step4 (clearPersistence, code='+(e&&e.code)+'):', e); }
+  await _cap(db.clearPersistence(), 2500, 'step4 (clearPersistence)');
   // 4b. belt-and-suspenders: purge Firebase's own IndexedDB stores directly too
   //     (covers auth-session corruption + any store clearPersistence missed).
   try {
@@ -476,7 +621,7 @@ window.fixLocalState = async function(reason){
     })));
   } catch(e){ console.warn('[Forge] fixLocalState step4b (indexedDB purge):', e); }
   // 5. kill the (possibly corrupted) anonymous auth session
-  try { await auth.signOut(); } catch(e){ console.warn('[Forge] fixLocalState step5 (signOut):', e); }
+  await _cap(auth.signOut(), 2500, 'step5 (signOut)');
   // 6. clear ONLY Forge's own session pointers — NOT localStorage.clear()
   //    (leaves forge_theme / forge_goal_* / unrelated origin data intact).
   //    forge_session is the legacy single-session key migrateLegacySession
@@ -484,7 +629,9 @@ window.fixLocalState = async function(reason){
   try { ['forge_sessions','forge_active','forge_session'].forEach(k => { try{ localStorage.removeItem(k); }catch(e){} }); }
   catch(e){ console.warn('[Forge] fixLocalState step6 (localStorage):', e); }
   // 7. hard reload → fresh anon auth + onboarding. Server identity intact.
-  try { location.reload(); } catch(e){ location.href = location.pathname; }
+  //    Routed through the same guard as the watchdog so the two can never
+  //    double-fire (a second reload mid-navigation is how you get a loop).
+  _reload();
 };
 
 // ── STEP 4: reusable recovery UI (self-contained, inline-styled like the boot
