@@ -1346,7 +1346,10 @@ window.onload = () => {
 };
 
 async function bootApp(){
-  try{ renderGoogleLoginDoor(); }catch(e){}   // before any screen shows
+  // Before any screen shows. Swallowed silently until now, which meant a throw
+  // here removed the returning-user door with no trace anywhere — the one
+  // control a person on a new phone needs to get back into their account.
+  try{ renderGoogleLoginDoor(); }catch(e){ logErr('bootApp:renderGoogleLoginDoor', e); }
   // Direct deep-link to group creation (kept from the S3 §4.2 dark-launch
   // era; the screen is now also reachable from onboarding's #founderDoor —
   // see the screen-create comment block for the promotion gate).
@@ -1396,7 +1399,13 @@ async function bootApp(){
     // A Google LOGIN redirect lands here, not in loadGroup's restore hook —
     // by definition this device has no session yet. Same call, no session
     // required; inert while the flag is off.
-    try{ finishGoogleLinkIfReturning(); }catch(e){}
+    // Only a SYNCHRONOUS throw reaches this catch — the function is async, so a
+    // rejection inside it is handled by its own logErr, not here. Either way the
+    // failure mode is the same and used to be invisible: a returning user comes
+    // back from Google, this dies, and they are left staring at the front door
+    // with no error and nothing recorded. That is the single worst outcome the
+    // Google flow has, so it gets a name.
+    try{ finishGoogleLinkIfReturning(); }catch(e){ logErr('bootApp:finishGoogleLinkIfReturning', e); }
   }
 }
 
@@ -2393,6 +2402,8 @@ let _mirLoading=false, _mirNoMore=false;
 let _mirRanks=null;         // {code:rank} from users doc, cached per session
 let _mirBestMonth=null;     // max distinct-day month count, from season archives
 let _mirPendingDay=null;    // day being logged via the sheet
+let _mirPendingMonth=null;  // …and the month/year that day belongs to, captured
+let _mirPendingYear=null;   // at tap time so the log's date has ONE source
 const _mirLogCache={};      // `${code}_${y}_${m}` -> [{day,workouts,id}] (own logs)
 const _mirInflight={};      // in-flight promise dedup (renderMirrorHome fires per snapshot)
 
@@ -2533,7 +2544,7 @@ async function mirLoadRanks(){
   _mirRanks={};
   try{ if(me.userId){ const d=await db.collection('users').doc(me.userId).get(); window._mirReadCount=(window._mirReadCount||0)+1; const gr=d.exists&&d.data().groupRanks; if(gr) _mirRanks=Object.assign({},gr); } }
   catch(e){ logErr('mirLoadRanks', e); }
-  try{ mirRenderPills(); }catch(e){}
+  try{ mirRenderPills(); }catch(e){ logErr('mirLoadRanks:renderPills', e); }
 }
 // Best distinct-day month count across archived seasons + current — one cached
 // query on the user's own season archives (same docs Profile already reads).
@@ -2709,7 +2720,9 @@ function mirTapDay(ix, d){
   if(d>todayD){ shake(); return; }                          // future
   if(d<MIN_TAP){ shake(); toast("Logs older than a week can't be added — Forge counts the week you're living."); return; }
   if(M.byDay[d]){ mirOpenDayDetail(d); return; }            // logged, in window → detail
-  _mirPendingDay=d;                                          // empty, in window → log sheet
+  // Capture the month FROM THE PANEL, not from season. M is the descriptor of
+  // the calendar the finger landed on, so day and month now come from one source.
+  _mirPendingDay=d; _mirPendingMonth=M.month; _mirPendingYear=M.year;   // empty, in window → log sheet
   mirOpenLogSheet(d);
 }
 
@@ -2747,8 +2760,8 @@ function mirOpenLogSheet(d){
   mirOpenSheet();
 }
 function mirOpenDayDetail(d){
-  _mirPendingDay=d;
   const cur=_mirMonths[_mirMonths.length-1];
+  _mirPendingDay=d; _mirPendingMonth=cur&&cur.month; _mirPendingYear=cur&&cur.year;
   const logs=cur.byDay[d]||[];
   const dt=new Date(season.year, season.month-1, d);
   const DOW=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -2793,7 +2806,7 @@ function mirLogQuick(w){
     return;
   }
   mirCloseSheet();
-  selDay=_mirPendingDay; selW=[w]; selKm=null; selNote=null;
+  selDay=_mirPendingDay; selMonth=_mirPendingMonth; selYear=_mirPendingYear; selW=[w]; selKm=null; selNote=null;
   window._mirrorLogMode=true;
   submitLog();
 }
@@ -2848,7 +2861,7 @@ function _mirLiftGo(w, note){
     }
   }
   mirCloseSheet();
-  selDay=_mirPendingDay; selW=[w]; selKm=null;
+  selDay=_mirPendingDay; selMonth=_mirPendingMonth; selYear=_mirPendingYear; selW=[w]; selKm=null;
   selNote = note || null;
   window._mirrorLogMode=true;
   submitLog();
@@ -2902,7 +2915,7 @@ function mirOpenKmStep(w){
 function mirKmSet(v){ const i=document.getElementById('mirKmInp'); if(i){ i.value=v; i.focus(); } }
 function mirKmSkip(w){
   mirCloseSheet();
-  selDay=_mirPendingDay; selW=[w]; selKm=null;
+  selDay=_mirPendingDay; selMonth=_mirPendingMonth; selYear=_mirPendingYear; selW=[w]; selKm=null;
   window._mirrorLogMode=true;
   submitLog();
 }
@@ -2914,7 +2927,7 @@ function mirKmConfirm(w){
   if(raw==='' || !Number.isFinite(v) || v<=0){ mirKmSkip(w); return; }
   if(v>KM_CONSTS.maxPerLog){ toast(`That\'s over ${KM_CONSTS.maxPerLog} km — check the number.`,'error'); return; }
   mirCloseSheet();
-  selDay=_mirPendingDay; selW=[w];
+  selDay=_mirPendingDay; selMonth=_mirPendingMonth; selYear=_mirPendingYear; selW=[w];
   selKm=Math.round(v*10)/10;      // one decimal; the engine clamps again on read
   window._mirrorLogMode=true;
   submitLog();
@@ -3783,7 +3796,7 @@ async function mirFillCrossGroup(activeShowed, activeMoved, isToday){
 function mirCloseReport(){
   const rep=document.getElementById('mirReport');
   rep.classList.remove('on'); rep.style.transform='';
-  selDay=null; selW=[]; selKm=null; selNote=null; window._mirrorLogMode=false;
+  selDay=null; selMonth=null; selYear=null; selW=[]; selKm=null; selNote=null; window._mirrorLogMode=false;
   try{ renderMirrorHome(); }catch(e){ logErr('mirCloseReport render', e); }
 }
 // swipe-down dismiss on the report
@@ -4161,7 +4174,8 @@ async function disablePushHere(){
       });
     }
     // best-effort: only possible if the SDK actually loaded
-    try{ if(firebase.messaging) await firebase.messaging().deleteToken(); }catch(e){}
+    try{ if(firebase.messaging) await firebase.messaging().deleteToken(); }
+  catch(e){ logErr('disablePushHere:deleteToken', e); }   // token survives; user still sees push off
     window._myPushToken=null;
     toast('Notifications off for this device.','success');
     renderPushCard();
@@ -4516,7 +4530,8 @@ async function renderHealthSuggestions(){
       + '<div style="display:flex;gap:8px">'
       + '<button class="btn btn-gold" style="margin:0;flex:1" '
       + 'onclick="logHealthSuggestion(\'' + escForInlineJsAttr(w.id) + '\',\''
-      + escForInlineJsAttr(w.label) + '\',' + w.day + ',' + (w.km==null?'null':w.km) + ')">Log it</button>'
+      + escForInlineJsAttr(w.label) + '\',' + w.day + ',' + (w.km==null?'null':w.km)
+      + ',' + w.month + ',' + w.year + ')">Log it</button>'
       + '<button class="btn" style="margin:0;flex:1;background:var(--bg-card-2);color:var(--text)" '
       + 'onclick="dismissHealthSuggestion(\'' + escForInlineJsAttr(w.id) + '\')">Not this one</button>'
       + '</div></div>').join('');
@@ -4548,12 +4563,19 @@ document.addEventListener('visibilitychange', function(){
   catch(e){ logErr('healthForegroundRefresh', e); }
 });
 
-function logHealthSuggestion(id, label, day, km){
+// month/year are passed explicitly because the suggestion already knows them:
+// healthRecentWorkouts reads them off the HealthKit sample's own start date. The
+// old signature dropped them and let submitLog assume the current season, so a
+// workout recorded late on the 31st and confirmed after midnight would have been
+// filed into the following month. Undefined from an older call site falls back
+// to season, which is the previous behaviour.
+function logHealthSuggestion(id, label, day, km, month, year){
   try{
     healthMarkSeen(id);
     // The exact path a manual log takes — validation, celebration, streaks and
     // all. km rides along only for distance workouts, same rule as manual.
-    selDay = day; selW = [label]; selNote = null;
+    selDay = day; selMonth = month || null; selYear = year || null;
+    selW = [label]; selNote = null;
     selKm = (km != null && typeof isDistanceWorkout==='function' && isDistanceWorkout(label)) ? km : null;
     window._mirrorLogMode = true;
     submitLog();
@@ -4772,15 +4794,27 @@ async function deleteFromOneGroup(gc, localName, userId){
   }
   if(voided) bumpGlobalStat('totalLogs', -voided);
 
-  // 2. Best-effort purges the rules DO allow. Never block the flow.
-  try{
-    const rs = await db.collection('reactions').where('groupCode','==',gc).where('player','==',localName).get();
-    for(const d of rs.docs){ try{ await d.ref.delete(); }catch(e){} }
-  }catch(e){}
-  try{
-    const fs = await db.collection('flags').where('groupCode','==',gc).where('player','==',localName).get();
-    for(const d of fs.docs){ try{ await d.ref.delete(); }catch(e){} }
-  }catch(e){}
+  // 2. Best-effort purges the rules DO allow. Never block the flow — but never
+  //    silent either. "Best-effort" was being used to mean "we will not know":
+  //    a person is told their data is gone, and if these deletes failed nobody
+  //    could ever find out. Deletion is the one promise that has to be auditable,
+  //    so each failure is counted and reported once at the end. The flow still
+  //    completes regardless; only the silence changes.
+  let purgeFailed = 0;
+  for(const [coll, label] of [['reactions','reactions'], ['flags','flags']]){
+    try{
+      const snap = await db.collection(coll).where('groupCode','==',gc).where('player','==',localName).get();
+      for(const d of snap.docs){
+        try{ await d.ref.delete(); }
+        catch(e){ purgeFailed++; logErr('deleteFromOneGroup:'+label+':doc', e); }
+      }
+    }catch(e){ purgeFailed++; logErr('deleteFromOneGroup:'+label+':query', e); }
+  }
+  if(purgeFailed){
+    logErr('deleteFromOneGroup:purgeIncomplete',
+      new Error('PURGE_INCOMPLETE group='+gc+' failures='+purgeFailed+
+                ' — reactions/flags survive; scripts/scrub-deleted-user.mjs is the backstop'));
+  }
 
   // 3. THE HALL OF THE DEPARTED (locked decision, AUTH_DESIGN_FINAL Q4).
   //    The roster row is NOT removed — it is renamed to a departure name and
@@ -5409,9 +5443,13 @@ async function submitLog(){
         team: sess.player.team,
         role: sess.player.role,
         workouts: selW,
+        // day, month and year now come from ONE source. selMonth/selYear are set
+        // by whatever selected the day — the calendar panel that was tapped, or
+        // the Health suggestion's own date — and are null only for the
+        // log-today entry points, where season is the right answer by definition.
         day: selDay,
-        month: season.month,
-        year: season.year,
+        month: (selMonth != null ? selMonth : season.month),
+        year:  (selYear  != null ? selYear  : season.year),
         timestamp: firebase.firestore.FieldValue.serverTimestamp(),
         // S4 NORTHSTAR §5.2: forward-only identity attribution — existing
         // logs are never backfilled. uid = this device's auth session;
@@ -5525,8 +5563,11 @@ async function submitLog(){
       // this log landed in, not just the one on screen. Snapshot the day/
       // workouts too — mirCloseReport clears the sel* globals, and the
       // cross-group fill can still be in flight when it does.
+      // Same source as the write above, or the afterglow narrates a different
+      // date than the one that was saved.
       window._mirBroadcast = { list: broadcast, day: selDay,
-                               month: season.month, year: season.year,
+                               month: (selMonth != null ? selMonth : season.month),
+                               year:  (selYear  != null ? selYear  : season.year),
                                workouts: (selW||[]).slice(),
                                km: selKm, note: selNote };
 
@@ -8439,7 +8480,26 @@ function toggleTheme(){
 
 let globalDataCache = null;
 let globalDataCacheTime = 0;
-const GLOBAL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+// ── THE GLOBAL TAB'S READ CEILING — measured, not guessed ────────────────────
+// loadGlobal costs G reads (one per group) on every cache miss, for every user
+// who opens the Global tab. This cache is in memory, so it is also lost on every
+// page load. Measured against the real data, assuming half of users open Global
+// twice a day:
+//
+//        76 users /  8 groups   ~608 reads/day     1.2% of the free tier
+//      1000 users / 83 groups ~83000 reads/day   166.0%  <-- over budget
+//
+// Raising the TTL 5 -> 30 min halves it. That is worth taking and is all this
+// constant can do: 83% of the tier is still not a plan. Global stats are not
+// real-time — the daily rollup only moves when someone logs — so 30 minutes
+// costs nothing anyone will notice.
+//
+// THE ACTUAL FIX, when groups pass ~40: stop reading G group docs. loadGlobal
+// needs only {name, demo, globalStats} per group, which is small enough to
+// denormalise into ONE summary doc alongside analytics/global/daily, dropping
+// the cost from G reads to 1. That needs a writer and a backfill, so it is a
+// deliberate piece of work rather than something to bolt on mid-batch.
+const GLOBAL_CACHE_TTL = 30 * 60 * 1000; // 30 minutes — see the ceiling above
 
 // ── GLOBAL LEADERBOARD (cross-group, opt-in) ───────────────────────────────
 // R3 DENORMALIZED READ. Was: read every group's season + twists + all-platform
@@ -9977,10 +10037,25 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
     }catch(e){}
   }
 
-  // Own load listener — initial check after 2s, then every 10s.
+  // Own load listener — initial check after 2s, then every 10s while visible.
   // The 2s delay gives Firestore time to load before the first check.
+  //
+  // The interval handle used to be thrown away, so this polled every 10 seconds
+  // for the life of the tab with no way to stop it — including the whole time
+  // the app sat in the background, which on a phone is most of its life.
+  // Keeping the handle costs nothing and makes it stoppable; pausing it when
+  // hidden is the actual saving, reusing the same visibilitychange signal the
+  // Apple Health refresh already listens on.
   window.addEventListener('load', function(){
-    try{ setTimeout(syncRecapBtn, 2000); setInterval(syncRecapBtn, 10000); }catch(e){}
+    try{
+      setTimeout(syncRecapBtn, 2000);
+      var start=function(){ if(!window._recapTimer) window._recapTimer=setInterval(syncRecapBtn, 10000); };
+      var stop =function(){ if(window._recapTimer){ clearInterval(window._recapTimer); window._recapTimer=null; } };
+      start();
+      document.addEventListener('visibilitychange', function(){
+        if(document.visibilityState==='visible'){ syncRecapBtn(); start(); } else { stop(); }
+      });
+    }catch(e){ logErr('recapBtn:timer', e); }
   });
 
   // Profile tab (on-demand recap for archived seasons) needs to open this
@@ -10076,7 +10151,12 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
       var key=ymKey(mo.y,mo.m);
       return db.collection('analytics').doc('global').collection('monthly').doc(key).get()
         .then(function(dd){ rollups[key]=(dd.exists&&dd.data().groups)||{}; })
-        .catch(function(){ rollups[key]={}; });
+        // THIS is the catch that hid the wrong headcount. A failed month became
+        // {} indistinguishable from "a month with no activity", so the dashboard
+        // rendered a confidently wrong number with nothing logged anywhere. An
+        // empty object is still the right fallback — the cockpit must not die
+        // because one month is unreadable — but it is no longer a secret.
+        .catch(function(e){ rollups[key]={}; logErr('SuperDash:rollup:'+key, e); });
     }));
     // Flatten into the shapes the build functions consume. gpList: one entry
     // per (group, player-string) with its cross-month workout-day set and the
@@ -10120,15 +10200,20 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
     var groupInfo={};
     await Promise.all(groups.map(async function(g){
       var seasons=[];
+      // A failure here empties a group's whole season history — every archived
+      // month, every roster — and the cockpit then reports on a group that looks
+      // brand new. Same class of lie as the rollup catch above.
       try{ var ss=await db.collection('groups').doc(g.code).collection('seasons').get();
-        seasons=ss.docs.map(function(dd){return {id:dd.id,...dd.data()};}); }catch(e){}
+        seasons=ss.docs.map(function(dd){return {id:dd.id,...dd.data()};}); }
+      catch(e){ logErr('SuperDash:seasons:'+g.code, e); }
       var cur=seasons.find(function(s){return s.id===g.currentSeasonId;})||null;
       var archived=seasons.filter(function(s){return s.status==='archived' && s.snapshotAt;})
         .sort(function(a,b){ return (b.year-a.year)||(b.month-a.month); })[0]||null;
       // tabClicks for the SELECTED month
       var selKey=ymKey(selY,selM), tabs=null;
       try{ var tc=await db.collection('analytics').doc(g.code).collection('tabClicks').doc(selKey).get();
-        if(tc.exists) tabs=tc.data(); }catch(e){}
+        if(tc.exists) tabs=tc.data(); }
+      catch(e){ logErr('SuperDash:tabClicks:'+g.code, e); }
       groupInfo[g.code]={ name:g.name||g.code, roster:(cur&&cur.roster)||[], currentSeasonId:g.currentSeasonId||null,
         archived:archived, tabs:tabs };
     }));
@@ -10164,7 +10249,8 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
     // empty read leaves woTotals null and the band renders as unavailable,
     // exactly like the errors/users sections degrade.
     var woTotals=cachedWo||null;
-    if(!woTotals){ try{ woTotals=await fetchWorkoutTotals(); }catch(e){} }
+    if(!woTotals){ try{ woTotals=await fetchWorkoutTotals(); }
+      catch(e){ logErr('SuperDash:workoutTotals', e); } }   // headline number silently zeroes without this
 
     return { now:now, todayMid:todayMid, curM:curM, curY:curY, selM:selM, selY:selY,
              isCurrentMonth:(selM===curM&&selY===curY), groups:groups, groupInfo:groupInfo,
@@ -10372,13 +10458,24 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
     // gpList carries the canonical userId resolved at rollup-write time (the
     // mergedInto chain is already followed there), so a Set over it is the
     // honest headcount and costs no extra reads.
-    var p = distinctPeople(data);
-    // Entries with no stamped userId cannot be deduped — they predate the
-    // identity work. Counting them in silently would overstate; dropping them
-    // silently would understate. They are added and then declared.
-    var peopleSub = p.unstamped
-      ? 'distinct people · '+p.unstamped+' pre-identity, may double-count'
-      : 'distinct people · deduped by identity';
+    // canonicalCount is usersAggCount(): every users doc minus mergedInto
+    // tombstones — the actual registered headcount, already fetched by fetchAll
+    // on every render. The first version of this tile counted distinct userIds
+    // in gpList instead, which is a different question ("who has logged
+    // recently") and read 17 against a real 76. gpList is bounded by the
+    // 5-month monthList AND by a silent catch on each rollup fetch, so it is
+    // the wrong source for a platform total no matter how it is deduped.
+    var reg = data.canonicalCount, peopleN, peopleSub;
+    if(!data.usersDenied && reg > 0){
+      peopleN = reg;
+      peopleSub = 'registered · merged accounts collapsed';
+    } else {
+      // Only if the aggregation was denied. Says which number it is, because a
+      // silent substitution here is how the 17 went unnoticed in the first place.
+      var p = distinctPeople(data);
+      peopleN = p.people;
+      peopleSub = 'have logged recently · registered count unavailable';
+    }
     return '<div class="sd-forged">'
       +'<div class="sd-forged-pair">'
         +'<div>'
@@ -10388,7 +10485,7 @@ if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative(
         +'</div>'
         +'<div>'
           +'<div class="sd-forged-l">People</div>'
-          +'<div class="sd-forged-v">'+grp(p.people)+'</div>'
+          +'<div class="sd-forged-v">'+grp(peopleN)+'</div>'
           +'<div class="sd-forged-s">'+peopleSub+'</div>'
         +'</div>'
       +'</div>'
