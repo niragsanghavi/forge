@@ -4523,6 +4523,31 @@ async function renderHealthSuggestions(){
   }catch(e){ logErr('renderHealthSuggestions', e); el.innerHTML=''; }
 }
 
+// FOREGROUND REFRESH — the fix for the feature's main path.
+// renderHealthSuggestions() only ever ran from renderHome(), so a workout
+// recorded while Forge sat in the background was never noticed: finish a run on
+// the Watch, switch back to an already-open Forge, and no suggestion appears.
+// That is exactly how someone would use this, and it reads as "the feature
+// doesn't work". Confirmed on a real iPhone 17 Aug 2026 — the workout was
+// invisible until a force-quit, then appeared instantly on relaunch.
+//
+// visibilitychange rather than @capacitor/app's appStateChange: WKWebView fires
+// it on background and foreground, it needs no new plugin (so no npm install and
+// no Package.swift churn before a build), and it does the same job for a PWA tab
+// on the web, where the identical staleness exists.
+//
+// Throttled because iOS fires this on every app switch and each call is a real
+// HealthKit query. renderHealthSuggestions() is already a no-op off-native,
+// signed out, or with Health disconnected, so this stays cheap everywhere.
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState !== 'visible') return;
+  const now = Date.now();
+  if(now - (window._healthFgAt || 0) < 3000) return;
+  window._healthFgAt = now;
+  try{ renderHealthSuggestions(); }
+  catch(e){ logErr('healthForegroundRefresh', e); }
+});
+
 function logHealthSuggestion(id, label, day, km){
   try{
     healthMarkSeen(id);
@@ -6643,10 +6668,19 @@ function renderTwistToggles(){
     const D=inSeason?now.getDate():(seasonPast?99:0);
     const isSunday=now.getDay()===0;
     const mn=MN[season.month-1];
-    const fmt=w=>`${mn} ${w.monDate}–${w.sunDate}`;
+    // Same month-end case as the scoring engine: a window running into the next
+    // month is stored with sunDate < monDate. Read literally, "past" (sunDate < D)
+    // matched a window that was actually RUNNING and "current" could never match —
+    // so on 31 Aug the admin panel would file a live Boss Week under Finished.
+    // Clamp the end to this season, exactly as the engine does.
+    const lastDay=new Date(season.year, season.month, 0).getDate();
+    const endOf=w=>(w.sunDate>=w.monDate ? w.sunDate : lastDay);
+    const fmt=w=>(w.sunDate>=w.monDate
+      ? `${mn} ${w.monDate}–${w.sunDate}`
+      : `${mn} ${w.monDate}${w.monDate===lastDay?'':'–'+lastDay}`);
     const wins=twistWindows.filter(w=>w.twist===t.id && w.month===season.month && w.year===season.year).sort((a,b)=>a.monDate-b.monDate);
-    const past=wins.filter(w=>w.sunDate<D);
-    const current=wins.filter(w=>w.monDate<=D && D<=w.sunDate);
+    const past=wins.filter(w=>endOf(w)<D);
+    const current=wins.filter(w=>w.monDate<=D && D<=endOf(w));
     const upcoming=wins.filter(w=>w.monDate>D);
     let status;
     if(current.length) status=`<span style="color:var(--green);font-weight:600">Active: ${esc(current.map(fmt).join(', '))}</span>`;
@@ -6754,10 +6788,21 @@ async function activateTwistWindow(twistId){
   try{
     await db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId)
       .collection('twistWindows').doc(`${twistId}_${weekStr}`).set(docData);
-    const range=`${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][mon.getMonth()]} ${monDate}–${sunDate}`;
+    const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    // A week starting near a month end runs into the next month. The window is
+    // stamped with its MONDAY's month and scoring is season-scoped, so only the
+    // days falling inside THIS month can ever pay. Report that instead of a
+    // clean success and a nonsense range like "Aug 31–6".
+    const spans = sun.getMonth()!==mon.getMonth();
+    const lastDay = new Date(mon.getFullYear(), mon.getMonth()+1, 0).getDate();
+    const range = spans ? `${MN[mon.getMonth()]} ${monDate} – ${MN[sun.getMonth()]} ${sunDate}`
+                        : `${MN[mon.getMonth()]} ${monDate}–${sunDate}`;
+    const spanNote = spans
+      ? ` Heads up: only ${MN[mon.getMonth()]} ${monDate}${monDate===lastDay?'':'–'+lastDay} counts, because ${MN[sun.getMonth()]} belongs to next month's season.`
+      : '';
     toast(twistId==='underdog_week' && docData.frozenPlayers && docData.frozenPlayers.length
-      ? `${label} set for next week (${range}). Underdog: ${docData.frozenPlayers.join(', ')}`
-      : `${label} set for next week (${range}).`,'success');
+      ? `${label} set for next week (${range}). Underdog: ${docData.frozenPlayers.join(', ')}.${spanNote}`
+      : `${label} set for next week (${range}).${spanNote}`,'success');
   }catch(e){ logErr('activateTwistWindow '+twistId, e); toast(`Could not set ${label} — it may already be set, or check your connection.`,'error'); }
 }
 async function saveTwistConfig(id,key,value){
@@ -9025,7 +9070,15 @@ document.addEventListener('click',e=>{ if(!e.target.classList.contains('cd')) do
 </script>
 <script>
 // Register the service worker (makes Forge installable + offline-capable).
-if('serviceWorker' in navigator){
+// Web only. The native shell serves this bundle from disk, so a worker would
+// only layer a second, staler cache over files that are already local — which
+// is why ios/build-www.mjs leaves sw.js out of the bundle. Without this guard
+// register() 404s on every native launch: harmless, since it is caught, but it
+// puts a red herring at the top of every crash report we would ever read.
+// The guard lives here rather than only on the ios-app branch so the next
+// staging → prod → ios-app promotion cannot quietly undo it. On the web
+// isNative() is false and behaviour is unchanged.
+if('serviceWorker' in navigator && !(typeof isNative === 'function' && isNative())){
   window.addEventListener('load', ()=>{
     navigator.serviceWorker.register('sw.js').catch(e=>console.warn('[Forge] SW registration failed', e));
   });
@@ -10313,12 +10366,46 @@ if('serviceWorker' in navigator){
       ? '<b>'+grp(selN)+'</b> in '+MONTHS[data.selM-1]+' '+data.selY
         +' · <b>'+t.months+'</b> active month'+(t.months===1?'':'s')+span
       : 'No workouts in any rollup yet — run backfillGlobalStats() to seed history.';
+    // PEOPLE, not roster rows. Summing each group's `members` counts anyone in
+    // two groups twice — which is exactly why the dashboard read "Nirag" three
+    // times: one human, one userId, three rosters (75EKZT, AJ6W6B, IPJEGE).
+    // gpList carries the canonical userId resolved at rollup-write time (the
+    // mergedInto chain is already followed there), so a Set over it is the
+    // honest headcount and costs no extra reads.
+    var p = distinctPeople(data);
+    // Entries with no stamped userId cannot be deduped — they predate the
+    // identity work. Counting them in silently would overstate; dropping them
+    // silently would understate. They are added and then declared.
+    var peopleSub = p.unstamped
+      ? 'distinct people · '+p.unstamped+' pre-identity, may double-count'
+      : 'distinct people · deduped by identity';
     return '<div class="sd-forged">'
-      +'<div class="sd-forged-l">Workouts forged</div>'
-      +'<div class="sd-forged-v">'+grp(t.allTime)+'</div>'
-      +'<div class="sd-forged-s">every group · all time · demo excluded</div>'
+      +'<div class="sd-forged-pair">'
+        +'<div>'
+          +'<div class="sd-forged-l">Workouts forged</div>'
+          +'<div class="sd-forged-v">'+grp(t.allTime)+'</div>'
+          +'<div class="sd-forged-s">every group · all time</div>'
+        +'</div>'
+        +'<div>'
+          +'<div class="sd-forged-l">People</div>'
+          +'<div class="sd-forged-v">'+grp(p.people)+'</div>'
+          +'<div class="sd-forged-s">'+peopleSub+'</div>'
+        +'</div>'
+      +'</div>'
       +'<div class="sd-forged-m">'+cover+'</div>'
       +'</div>';
+  }
+  // Distinct humans who have logged at least once, across every non-demo group.
+  // Keyed on the canonical userId; entries without one fall back to group||player,
+  // which is the best available guess and is reported separately rather than
+  // folded in as if it were certain.
+  function distinctPeople(data){
+    var ids=new Set(), unstamped=0;
+    (data.gpList||[]).forEach(function(e){
+      if(e.uid) ids.add(e.uid);
+      else { ids.add('anon:'+e.code+'||'+e.player); unstamped++; }
+    });
+    return { people: ids.size, unstamped: unstamped };
   }
   // 1234567 -> "1,234,567"
   function grp(n){ return String(n==null?0:n).replace(/\B(?=(\d{3})+(?!\d))/g,','); }
@@ -10842,6 +10929,11 @@ if('serviceWorker' in navigator){
       +'.sd-forged-l{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.18em;color:var(--muted)}'
       +'.sd-forged-v{font-size:44px;font-weight:900;color:var(--gold);line-height:1.05;margin:6px 0 3px;font-variant-numeric:tabular-nums}'
       +'.sd-forged-s{font-size:11px;color:var(--muted)}'
+      /* Two headline figures side by side. The divider is a hairline so the pair
+         reads as one card rather than two competing tiles. */
+      +'.sd-forged-pair{display:flex;align-items:stretch;justify-content:center;gap:0}'
+      +'.sd-forged-pair>div{flex:1 1 0;padding:0 8px;min-width:0}'
+      +'.sd-forged-pair>div+div{border-left:1px solid rgba(212,175,55,.25)}'
       +'.sd-forged-m{font-size:12px;color:var(--muted);margin-top:12px;padding-top:10px;border-top:1px solid rgba(212,175,55,.25)}'
       +'.sd-forged-m b{color:var(--text);font-variant-numeric:tabular-nums}'
       +'.sd-pulse{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}'
