@@ -6728,7 +6728,21 @@ async function resetPlayerPin(name){
     if(written){ season.roster=written; }
     renderAdminRoles();
     toast(`${name}'s PIN has been reset.`,'success');
-  } catch(e){ logErr('resetPlayerPin', e); toast('Reset failed — check connection.','error'); }
+  } catch(e){
+    logErr('resetPlayerPin', e);
+    // "check connection" was a lie for the case that actually happens. pinHash
+    // is WRITE-ONCE in the rules as of 17 Aug (see match /users/{userId}) —
+    // deliberately, because value -> null from a client is the second half of a
+    // proven account-takeover. So this transaction is DENIED for every player
+    // who has ever set a PIN, which is all 72 of them, and the admin was told
+    // their internet was bad. Name the real cause instead; the permanent fix is
+    // the adminResetPin callable this file's header already advertises, which
+    // has to run server-side precisely because no client may do this.
+    const denied = e && (e.code === 'permission-denied' || /PERMISSION_DENIED/i.test(String(e.message||'')));
+    toast(denied
+      ? 'PIN resets have to run on the server now — this one needs doing from the Firebase console.'
+      : 'Reset failed — check connection.', 'error');
+  }
 }
 
 function renderTwistToggles(){
