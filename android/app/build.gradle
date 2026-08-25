@@ -1,5 +1,17 @@
 apply plugin: 'com.android.application'
 
+// Signing credentials live in android/keystore.properties — gitignored, because
+// this repo is public. Play ties the app to the key that signed versionCode 1
+// (fingerprint 5E:33:9E:6D…, the one in assetlinks.json); an upload signed with
+// any other key is rejected, and the TWA's deep links break with it.
+// Absent the file, release builds stay unsigned rather than failing the build,
+// so a plain `assembleDebug` still works on a machine that has no key.
+def keystorePropsFile = rootProject.file('keystore.properties')
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+
 android {
     namespace = "in.goforge.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,7 +19,12 @@ android {
         applicationId "in.goforge.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
+        // versionCode 1 was already consumed by the TWA build that went through
+        // closed testing (the one Play flags as targeting API 35). Play refuses a
+        // duplicate version code, so this Capacitor build has to start at 2.
+        // Bump it for EVERY upload — Play never accepts the same number twice,
+        // even for a build you deleted.
+        versionCode 2
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
@@ -16,8 +33,24 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (keystorePropsFile.exists()) {
+                storeFile file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
+            // Only attach the config when the key is actually present. Wiring an
+            // empty signingConfig makes Gradle fail with "storeFile is null"
+            // instead of just producing an unsigned build.
+            if (keystorePropsFile.exists()) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
