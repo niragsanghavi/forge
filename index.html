@@ -2265,7 +2265,7 @@ function renderWitnessStrip(){
 // every existing call site (refresh, switchGroup, boot) is unchanged.
 function renderHome(){
   if(!groupData||!me) return;
-  try { renderMirrorHome(); }
+  try { renderMirrorHome(); renderHealthSuggestions(); }
   catch(e){ logErr('renderMirrorHome', e); }
   // Its own guard, like every other renderer here. Sharing renderMirrorHome's
   // try meant a Health failure was logged under the wrong name AND a Mirror
