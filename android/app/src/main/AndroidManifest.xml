@@ -42,11 +42,15 @@
 
     <!-- HEALTH PERMISSIONS, PRUNED. The health plugin declares every permission
          it COULD use in its own manifest, and the manifest merger pulls all 47
-         into the APK. Forge reads exactly two things: exercise sessions and
-         their distance. Shipping 45 unused health permissions (blood glucose,
-         blood pressure, body fat...) is a Play-review rejection risk and worse,
-         a dishonest privacy posture. tools:node="remove" strips each at merge
-         time; what remains is READ_EXERCISE + READ_DISTANCE only.
+         into the APK. Forge reads exactly three things: exercise sessions,
+         their distance, and daily step totals (the weekly step challenge,
+         promoted 25 Aug — its Health Connect read died at the permission ask
+         until READ_STEPS's remove-line was deleted below). Shipping 44 unused
+         health permissions (blood glucose, blood pressure, body fat...) is a
+         Play-review rejection risk and worse, a dishonest privacy posture.
+         tools:node="remove" strips each at merge time; what remains is
+         READ_EXERCISE + READ_DISTANCE + READ_STEPS only — reads, never writes:
+         WRITE_STEPS below stays stripped on purpose.
          If Forge ever reads more, delete the matching remove-line here. -->
     <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" tools:node="remove" />
     <uses-permission android:name="android.permission.health.READ_BASAL_BODY_TEMPERATURE" tools:node="remove" />
@@ -66,7 +70,6 @@
     <uses-permission android:name="android.permission.health.READ_RESPIRATORY_RATE" tools:node="remove" />
     <uses-permission android:name="android.permission.health.READ_RESTING_HEART_RATE" tools:node="remove" />
     <uses-permission android:name="android.permission.health.READ_SLEEP" tools:node="remove" />
-    <uses-permission android:name="android.permission.health.READ_STEPS" tools:node="remove" />
     <uses-permission android:name="android.permission.health.READ_TOTAL_CALORIES_BURNED" tools:node="remove" />
     <uses-permission android:name="android.permission.health.READ_VO" tools:node="remove" />
     <uses-permission android:name="android.permission.health.READ_WEIGHT" tools:node="remove" />
