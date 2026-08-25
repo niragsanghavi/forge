@@ -6692,56 +6692,62 @@ async function renamePlayer(oldName){
 // loggable-in via their OLD pin through whichever path didn't clear. Puts
 // the player back into the existing grace-flow state (no pin yet); their
 // next name-pick routes them straight into setting a new one.
+// PIN RESET IS A SERVER CALL NOW, and it has to be. This used to clear
+// roster.pin and users.pinHash from here in one transaction. Then the 17 Aug
+// rules made pinHash WRITE-ONCE from any client — deliberately, because
+// value -> null is the second half of a proven takeover (PATCH someone's
+// pinHash, then sign in as them). That rule is correct and stays, which means
+// this write is DENIED for every player who ever set a PIN. It failed for all
+// 72 of them and blamed the network. The admin SDK bypasses rules, so the work
+// moved to the adminResetPin callable and this is now just its front door.
+//
+// The admin key is NOT the 4-digit group PIN and NOT ADMIN_PIN_HASH — that one
+// lives in a public repo hashing four digits, so it is public by construction.
+// It is a server secret (ADMIN_RESET_KEY) that has never been in the bundle.
+// It is read into a local, sent once, and never stored, logged or toasted.
 async function resetPlayerPin(name){
   if(!confirm(`Reset ${name}'s PIN? They'll set a new one next time they log in.`)) return;
-  const sRef = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
+  const adminKey = prompt(`Admin key to reset ${name}'s PIN.\n\nThis is the server key, not the 4-digit group PIN.`);
+  if(adminKey === null) return;                       // cancelled, not failed
+  if(!adminKey.trim()){ toast('Admin key is required.','error'); return; }
   try {
-    let written=null, clearedUserId=null, wasLinked=false;
-    await db.runTransaction(async tx=>{
-      const snap=await tx.get(sRef);
-      if(!snap.exists) throw new Error('SEASON_MISSING');
-      const roster=snap.data().roster||[];
-      const entry=roster.find(p=>p.name===name);
-      if(!entry) throw new Error('NO_RECORD');
-      clearedUserId=entry.userId||null;
-      // A player who secured their account with Google has no PIN to reset —
-      // and once the users-doc ownership rule is live (AUTH_PHASE2_NOTES),
-      // writing pinHash:null on their doc from an admin's client is BLOCKED.
-      // So detect the link inside the transaction and skip the user-doc write;
-      // there is nothing to clear and attempting it would just error.
-      let linkedDoc=null;
-      if(clearedUserId){
-        const uSnap=await tx.get(db.collection('users').doc(clearedUserId));   // all reads first
-        linkedDoc = uSnap.exists && uSnap.data().authUid ? uSnap : null;
-      }
-      wasLinked = !!linkedDoc;
-      if(wasLinked) return;   // Google account — no PIN exists; leave roster + user doc untouched
-      entry.pin=null;
-      entry.pinSet=false;   // clear the credential sentinel → next login routes to grace
-      tx.update(sRef,{roster});
-      if(clearedUserId){
-        tx.update(db.collection('users').doc(clearedUserId), {pinHash:null});
-      }
-      written=roster;
-    });
-    if(wasLinked){ toast(`${name} signs in with Google — there's no PIN to reset.`,'default'); return; }
-    if(written){ season.roster=written; }
+    const r = await callFunction('adminResetPin', { groupCode, name, adminKey: adminKey.trim() });
+    // Mirror the server's write locally rather than re-reading the season — the
+    // callable already did the authoritative work, and a re-read costs a doc
+    // read to learn something we know. Matched case-insensitively because that
+    // is how the function resolves the roster entry.
+    if(r && r.ok && !r.already && Array.isArray(season && season.roster)){
+      const e = season.roster.find(p => p && String(p.name).toLowerCase() === name.toLowerCase());
+      if(e){ e.pin = null; e.pinSet = false; }
+    }
     renderAdminRoles();
-    toast(`${name}'s PIN has been reset.`,'success');
+    toast(r && r.already
+      ? `${name} had no PIN set — nothing to reset.`
+      : `${name}'s PIN has been reset.`, 'success');
   } catch(e){
-    logErr('resetPlayerPin', e);
-    // "check connection" was a lie for the case that actually happens. pinHash
-    // is WRITE-ONCE in the rules as of 17 Aug (see match /users/{userId}) —
-    // deliberately, because value -> null from a client is the second half of a
-    // proven account-takeover. So this transaction is DENIED for every player
-    // who has ever set a PIN, which is all 72 of them, and the admin was told
-    // their internet was bad. Name the real cause instead; the permanent fix is
-    // the adminResetPin callable this file's header already advertises, which
-    // has to run server-side precisely because no client may do this.
-    const denied = e && (e.code === 'permission-denied' || /PERMISSION_DENIED/i.test(String(e.message||'')));
-    toast(denied
-      ? 'PIN resets have to run on the server now — this one needs doing from the Firebase console.'
-      : 'Reset failed — check connection.', 'error');
+    logErr('resetPlayerPin', e);                      // the error carries no key
+    // The compat SDK prefixes callable codes with "functions/"; the modular one
+    // does not. Strip it so one set of cases covers both.
+    const code = String((e && e.code) || '').replace(/^functions\//, '');
+    const msg  = String((e && e.message) || '');
+    if(msg === 'FUNCTIONS_SDK_MISSING'){
+      toast('Reload the page and try again.','error');
+    } else if(code === 'permission-denied'){
+      toast('That admin key is not right.','error');
+    } else if(code === 'resource-exhausted'){
+      toast(msg || 'Too many attempts. Try again later.','error');
+    } else if(code === 'failed-precondition'){
+      // Either the player signs in with Google, or ADMIN_RESET_KEY was never
+      // set on the project. The function says which; pass it through verbatim.
+      toast(msg || 'Cannot reset this account.','error');
+    } else if(code === 'not-found'){
+      // Ambiguous on purpose: a callable that was never deployed 404s exactly
+      // like a group code that does not exist. Name both so the admin is not
+      // hunting a typo when the real answer is that functions are not live yet.
+      toast(msg || 'Not found — check the name, or the reset function may not be deployed yet.','error');
+    } else {
+      toast('Reset failed — check connection.','error');
+    }
   }
 }
 
