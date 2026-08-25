@@ -4569,18 +4569,35 @@ document.addEventListener('visibilitychange', function(){
 // workout recorded late on the 31st and confirmed after midnight would have been
 // filed into the following month. Undefined from an older call site falls back
 // to season, which is the previous behaviour.
-function logHealthSuggestion(id, label, day, km, month, year){
+// MARK SEEN ONLY AFTER THE WRITE LANDS. This used to burn the suggestion on
+// the first line, before submitLog was even called — so a log that failed took
+// the workout with it. healthSeen() is permanent and per-device, meaning that
+// HealthKit sample could never be offered again on that phone: the workout was
+// unloggable from Health forever, and the card simply vanished with no error,
+// no toast and nothing to retry. Reordering costs one await and makes a failed
+// tap fully recoverable — the card comes straight back.
+async function logHealthSuggestion(id, label, day, km, month, year){
   try{
-    healthMarkSeen(id);
     // The exact path a manual log takes — validation, celebration, streaks and
     // all. km rides along only for distance workouts, same rule as manual.
     selDay = day; selMonth = month || null; selYear = year || null;
     selW = [label]; selNote = null;
     selKm = (km != null && typeof isDistanceWorkout==='function' && isDistanceWorkout(label)) ? km : null;
     window._mirrorLogMode = true;
-    submitLog();
+    const ok = await submitLog();
+    // Only an explicit false is a failure. An older submitLog (or any future
+    // early return that predates this contract) returns undefined, and the safe
+    // reading of undefined is "it probably wrote" — re-offering a workout that
+    // did save would produce a duplicate log, which is worse than losing a
+    // suggestion. submitLog itself already toasts on the paths that return false.
+    if(ok !== false) healthMarkSeen(id);
     renderHealthSuggestions();
-  }catch(e){ logErr('logHealthSuggestion', e); }
+  }catch(e){
+    logErr('logHealthSuggestion', e);
+    // Repaint regardless, so a thrown error leaves the card on screen to retry
+    // rather than a half-updated Home.
+    try{ renderHealthSuggestions(); }catch(_){}
+  }
 }
 
 function dismissHealthSuggestion(id){
@@ -5392,7 +5409,11 @@ async function submitLog(){
   // screen changes during the up-to-4s commit, and a mobile double-tap lands
   // in ~150ms. Two commits = two log docs, doubled workout counts, doubled
   // lifetime stats and a doubled global counter.
-  if(window._submitInFlight){ return; }
+  // Returns true when the log was written (or safely queued offline), false on
+  // every failure path. Callers that need to know — logHealthSuggestion has to
+  // decide whether to burn the Health suggestion — can await it; the Mirror
+  // sheet ignores the result, which is the previous behaviour.
+  if(window._submitInFlight){ return false; }
   window._submitInFlight = true;
   window._mirrorLogMode=false;
   const btn=document.getElementById('subBtn');
@@ -5408,7 +5429,20 @@ async function submitLog(){
       // not per-active-group — a broadcast can mix demo and real groups).
       if(sess.code === groupCode){ targets.push({...sess, _demo: !!(groupData && groupData.demo===true)}); return; }
       try {
-        const gSnap = await db.collection('groups').doc(sess.code).get();
+        // TIMEOUT. There is a watchdog on the commit but there was none here,
+        // and this read runs BEFORE the toast, before the error log and before
+        // the finally that releases _submitInFlight. A get() that never settles
+        // therefore wedged the flag true for the rest of the session: the tap
+        // did nothing, said nothing, recorded nothing, and every later tap hit
+        // the re-entrancy guard and returned in silence. Suspected cause of the
+        // dead Health "Log it" button on 25 Aug 2026.
+        // 6s, and a timeout is treated exactly like an unreadable group —
+        // skipped, logged, never fatal. The active group is pushed above
+        // without a read, so it can never be the one that stalls.
+        const gSnap = await Promise.race([
+          db.collection('groups').doc(sess.code).get(),
+          new Promise((_,rej)=>setTimeout(()=>rej(new Error('GROUP_READ_TIMEOUT')), 6000))
+        ]);
         if(gSnap.exists && gSnap.data().currentSeasonId === seasonId) targets.push({...sess, _demo: gSnap.data().demo===true});
       } catch(e){ logErr('submitLog: skipped unreadable group '+sess.code, e); /* never block the log */ }
     }));
@@ -5423,7 +5457,7 @@ async function submitLog(){
     if(!targets.length){
       logErr('submitLog: no write targets', new Error('EMPTY_TARGETS groupCode='+groupCode+' sessions='+sessions.length));
       toast('Couldn’t save — this device lost track of your group. Reload and try again.','error');
-      return;
+      return false;
     }
     const batch = db.batch();
     const newLogIds = new Set();   // reward screen: tells "already echoed into allLogs" apart from listener lag
@@ -5577,7 +5611,18 @@ async function submitLog(){
     } catch(e){
       logErr('submitLog: post-commit presentation failed', e);
     }
-  } catch(e){ console.error('submitLog failed:',e); toast('Error saving. Check connection.','error'); if(btn){ btn.disabled=false; btn.textContent='Log Workout'; } }
+    return true;
+  } catch(e){
+    // logErr, not console.error. console output dies with the WKWebView, and
+    // this is the one failure we most need to see: on an App Store build there
+    // is no inspector, so a save that fails on someone's phone left no trace
+    // anywhere. Routing it through logErr puts it in errorLogs with the device
+    // context attached. The toast is unchanged.
+    logErr('submitLog', e);
+    toast('Error saving. Check connection.','error');
+    if(btn){ btn.disabled=false; btn.textContent='Log Workout'; }
+    return false;
+  }
   finally {
     // Release on EVERY exit — success, the empty-targets return, and the catch
     // above. A flag that leaks on one path would block every later log for the
@@ -7282,7 +7327,13 @@ async function saveEditGroup(){
   const days=parseInt(document.getElementById('editDays').value)||30;
   const capTarget=parseInt(document.getElementById('editCapTarget').value)||16;
   const vcTarget=parseInt(document.getElementById('editVCTarget').value)||20;
-  const minWorkouts=parseInt(document.getElementById('editMinWO').value)||12;
+  // parseInt('0') is 0, which is FALSY — so `||12` silently rewrote a deliberate
+  // zero back into twelve and the min-workout penalty could never be switched
+  // off from the admin panel at all. Validate the parse instead of leaning on
+  // truthiness; 0 is a legitimate setting (pause the penalty), 12 stays the
+  // fallback for a blank or unparseable box.
+  const _mwRaw=parseInt(document.getElementById('editMinWO').value,10);
+  const minWorkouts=Number.isFinite(_mwRaw) && _mwRaw>=0 ? _mwRaw : 12;
   const numTeams=Math.min(3,Math.max(1,parseInt(document.getElementById('editNumTeams').value)||3));
   const thresholdPct=Math.min(100,Math.max(30,parseInt(document.getElementById('editThreshold').value)||60));
   // null (not 0, not absent) is the explicit "off" value — every km surface tests
@@ -8341,7 +8392,13 @@ async function createGroup(){
   const days=new Date(year, month, 0).getDate();
   const capTarget=parseInt(document.getElementById('newGroupCapTarget').value);
   const vcTarget=parseInt(document.getElementById('newGroupVCTarget').value);
-  const minWorkouts=parseInt(document.getElementById('newGroupMinWO').value);
+  // Same trap as the admin panel, one step earlier: an emptied box parses to
+  // NaN and this one had no fallback at all, so the season was created with
+  // minWorkouts: NaN. Nothing errors — `wo < NaN` is simply always false — so
+  // the penalty silently never applies and the group looks fine for a month.
+  // Every sibling field on this form is already clamped; this one was missed.
+  const _ngMw=parseInt(document.getElementById('newGroupMinWO').value,10);
+  const minWorkouts=Number.isFinite(_ngMw) && _ngMw>=0 ? _ngMw : 12;
   const numTeams=Math.min(3, Math.max(1, parseInt(document.getElementById('newGroupNumTeams').value)||3));
   const thresholdPct=Math.min(100, Math.max(30, parseInt(document.getElementById('newGroupThreshold').value)||60));
   const rolesEnabled=document.getElementById('newGroupRoles').checked;
