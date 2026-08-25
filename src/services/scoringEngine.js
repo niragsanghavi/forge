@@ -26,6 +26,26 @@ const KM_CONTRIBUTOR_BONUS = 15;   // per qualifying member, once per season
 const KM_MIN_CONTRIBUTION  = 1;    // km — stops a 0.1km tap from claiming 15 pts
 const KM_MAX_PER_LOG       = 200;  // km — clamps typos (a "500km walk") per log
 
+// Hard ceiling on what ONE resolved step-week can pay a member. The default is
+// 5 (STEP_WIN_BONUS) and even a very generous admin override would not exceed a
+// handful. This is a SECURITY clamp, not a config: a step_week window lives in
+// twistWindows, which `create: if isAuthed()` leaves open to any anonymous
+// client (proven 18 Aug 2026 — a forged window with bonus:1,000,000 was
+// accepted by the deployed rules). Reading that value straight into a score
+// would let anyone award anyone unlimited points. Clamping on READ means even a
+// forged window can move a board by at most this much — the same belt-and-braces
+// shape as KM_MAX_PER_LOG. The real fix is locking down the twistWindows create
+// rule; this is the floor that holds until it ships.
+const STEP_BONUS_MAX_PER_WEEK = 25;
+
+// ── PERSONAL STREAK MILESTONE ───────────────────────────────────────────────
+// Every unbroken week of logging pays this, to the person who did it. Sized
+// deliberately against the alternatives: two days of base (+10), the same as a
+// perfect week, and half a Jack of All Trades. Big enough to notice on the
+// board, small enough that consistency still beats it over a month.
+const STREAK_MILESTONE_DAYS  = 7;
+const STREAK_MILESTONE_BONUS = 10;
+
 // ── SNAPSHOT CACHE ──────────────────────────────────────────────────────────
 // score() used to re-scan the whole log array per call, and the team-streak /
 // underdog sections re-scanned it per roster entry per call — one leaderboard
@@ -93,14 +113,88 @@ function _ctxEntry(ctx){
   // permanently raise the bar for everyone still playing — one person quitting
   // would quietly break their team's streak. Their PAST logs still score; only
   // the forward-looking headcount changes.
+  //
+  // THE SAME ARGUMENT APPLIES TO THE LIVING. A member who has not logged once
+  // all month is, for the purposes of "did enough of us train today", exactly
+  // as absent as a deleted account — but they were still inflating the bar for
+  // everyone who did show up. Measured on live data 22 Aug 2026: Squad +1s
+  // Team A needed 3 of a roster of 4 when only 2 people were still playing, so
+  // its two loyal members could log perfectly every day and never once earn a
+  // streak. Vandrao Team B needed 6 with 5 playing. Both were unreachable, and
+  // silently so — nothing on screen said the mechanic was off.
+  //
+  // Counting only the people who are actually playing this month fixes that
+  // without labelling anyone as gone. Nobody is removed from the roster, nobody
+  // loses points, and a dormant member rejoins the denominator the moment they
+  // log again.
+  //
+  // THE BAR IS PER DAY, AND THE PAST IS FIXED. A member counts toward the
+  // denominator from the day of their FIRST log that month, and every day after
+  // it. Not before.
+  //
+  // The naive version — one denominator for the whole month, counting anyone who
+  // logged at any point — silently rewrites history. Every day is re-scored with
+  // today's bar, so one dormant member returning on the 25th raises the bar for
+  // the 1st through the 24th as well. Measured on live data 22 Aug 2026, a
+  // single returner would have cost Ghadiyali B 9 of its 17 qualifying days,
+  // HardCore A 9 of 12, and Vandrao A all 4 of 4. The loyal members would open
+  // the app to find a streak they had already been shown was gone, because
+  // somebody else came back. That is the opposite of what a comeback should do.
+  //
+  // Anchoring each day's denominator to who was playing BY THAT DAY makes the
+  // past immutable: a return can only ever affect today and the days after it.
+  // The residual is the ~8-day backlog window — logging for a past day does
+  // move that day's denominator — which is narrow, rare, and self-correcting.
+  // A ROLLING WINDOW, so the bar adapts in BOTH directions. You are counted on
+  // day D if you logged at any point in the previous ACTIVE_WINDOW days. Not
+  // "ever this month" — that let a single log on the 6th hold the bar up for
+  // the remaining 25 days, which is the same unfairness pointing forwards.
+  //
+  // Two properties this buys, and both matter:
+  //   · The past cannot be rewritten. Day D's bar depends only on logs up to
+  //     day D, so a comeback on the 25th can never un-qualify the 5th.
+  //   · A member who stops drifts back out on their own after two weeks, with
+  //     no admin action and nobody marked as departed.
+  //
+  // Two weeks because it is the shortest window that survives a holiday or a
+  // work trip without dropping someone who is still committed, and the measured
+  // return cliff sits at 8 days — past that, two thirds never come back, so
+  // fourteen is comfortably beyond the point where absence is usually real.
+  const ACTIVE_WINDOW=14;
+  const dayListOf=new Map();
+  for(const l of logs){
+    if(!l || !l.player || !l.day) continue;
+    if(!dayListOf.has(l.player)) dayListOf.set(l.player,[]);
+    dayListOf.get(l.player).push(l.day);
+  }
+  const teamMembers=new Map();
   roster.forEach(p=>{ if(p && p.departed===true) return;
+                      if(!teamMembers.has(p.team)) teamMembers.set(p.team,[]);
+                      teamMembers.get(p.team).push(p.name);
                       teamCount.set(p.team,(teamCount.get(p.team)||0)+1); });
   const qualByTeam=new Map();
-  for(const [t,count] of teamCount){
+  for(const [t,names] of teamMembers){
     const td=teamDayLog.get(t);
-    const thr=Math.ceil(count*thrFactor);
+    // Per-day headcount via a difference array: each logged day marks its owner
+    // present for the next ACTIVE_WINDOW days. O(logs + DAYS) per member rather
+    // than scanning the window per day — this runs on every render.
+    const present=new Array(DAYS+2).fill(0);
+    for(const n of names){
+      const ds=dayListOf.get(n); if(!ds || !ds.length) continue;
+      const cover=new Array(DAYS+2).fill(0);
+      for(const d of ds){
+        const a=Math.max(1,d), b=Math.min(DAYS,d+ACTIVE_WINDOW-1);
+        if(a<=b){ cover[a]++; cover[b+1]--; }
+      }
+      let acc=0;
+      for(let d=1; d<=DAYS; d++){ acc+=cover[d]; if(acc>0) present[d]++; }
+    }
     const qual=[]; let run=0;
     for(let d=1; d<=DAYS; d++){
+      // Floor of 1: a denominator of 0 would make the bar 0, and "at least 0
+      // people trained" is true every day — a free streak for a team where
+      // nobody has logged.
+      const thr=Math.max(1, Math.ceil(present[d]*thrFactor));
       const s=(td && td.get(d)) || _EMPTY_SET;
       if(s.size>=thr){ run++; qual.push({set:s, streakLen:run}); }
       else run=0;
@@ -142,6 +236,35 @@ function _ctxEntry(ctx){
     .filter(w=>w.twist==='underdog_week')
     .map(w=>({monDate:w.monDate, sunDate:endOf(w), frozen:new Set(w.frozenPlayers||[])}));
 
+  // Step Challenge: a RESOLVED week froze three things at resolution time — who
+  // won, who was on that team, and what the bonus was worth. Scoring reads only
+  // those frozen fields and never recomputes from step data, for the same
+  // reason Underdog Week freezes its players: a roster edit on Tuesday must not
+  // rewrite who won last week, and turning the challenge off must not silently
+  // claw back points people were already told they had.
+  //
+  // An UNRESOLVED window (no `awarded`) pays nothing. That is what makes the
+  // week live on the board but worth zero until it is settled.
+  const stepAwards=new Map();
+  for(const w of seasonWindows){
+    if(w.twist!=='step_week' || !Array.isArray(w.awarded)) continue;
+    // The frozen per-week value. Absent on a doc written before the field
+    // existed — pay nothing rather than guess a number that moves a score.
+    // Clamp on READ. The window is a twistWindows doc, a collection any
+    // anonymous client can write to — so `bonus` is attacker-controllable and
+    // must be treated as hostile input, not trusted config. STEP_BONUS_MAX_PER_WEEK
+    // turns a forged 1,000,000 into at most the cap; a legitimate 5 is untouched.
+    // Validate the RAW value first, THEN clamp — clamping first would turn a
+    // forged Infinity into a passing `min(Infinity,cap)=cap` and pay it.
+    const raw=Number(w.bonus);
+    if(!Number.isFinite(raw) || raw<=0) continue;
+    const pts=Math.min(raw, STEP_BONUS_MAX_PER_WEEK);
+    // The winning set is attacker-controllable too, but it can only ADD names to
+    // a payout the cap already bounds — so a forged window's worst case is
+    // "everyone named gets at most the cap", not "one person gets millions".
+    for(const name of w.awarded) stepAwards.set(name,(stepAwards.get(name)||0)+pts);
+  }
+
   const b30Set=new Set(bonuses.map(b=>b.player));
   const jackCnt=new Map();
   jacks.forEach(a=>{ if(!a.groupCode||a.groupCode===myGC) jackCnt.set(a.player,(jackCnt.get(a.player)||0)+1); });
@@ -164,7 +287,7 @@ function _ctxEntry(ctx){
     // Coerced here so a stringly-typed admin value can't poison comparisons.
     kmTarget: (Number.isFinite(Number(cfg.kmTarget)) && Number(cfg.kmTarget)>0) ? Number(cfg.kmTarget) : null,
     kmByPlayer, kmByTeam, teamOf,
-    bonusWord, friOn, monOn, bossDays, underdogWindows,
+    bonusWord, friOn, monOn, bossDays, underdogWindows, stepAwards,
     b30Set, jackCnt, ipSum,
     dowBase, todayDay, isEnd, rosterLen:roster.length,
     results:new Map()
@@ -180,7 +303,7 @@ function score(playerName, ctx){
 
   const p=E.rosterByName.get(playerName);
   if(!p){
-    r={wo:0,base:0,sb:0,wb:0,rb:0,tb:0,b30:0,pen:0,bossBonus:0,dayBonuses:0,underdogBonus:0,jackBonus:0,ipBonus:0,kmBonus:0,myKm:0,teamKm:0,total:0,streak:0,days:_EMPTY_SET};
+    r={wo:0,base:0,sb:0,wb:0,rb:0,tb:0,b30:0,pen:0,bossBonus:0,dayBonuses:0,underdogBonus:0,jackBonus:0,ipBonus:0,kmBonus:0,stepBonus:0,myKm:0,teamKm:0,total:0,streak:0,days:_EMPTY_SET};
     E.results.set(playerName,r);
     return r;
   }
@@ -203,11 +326,38 @@ function score(playerName, ctx){
   let base=0;
   for(const d of days) base += dayBaseOf(d);
 
-  // ── STREAK (display only) ── consecutive run ending today (or yesterday)
+  // ── STREAK ── consecutive run ending today (or yesterday), for display
   const checkUpTo=days.has(E.todayDay) ? E.todayDay : E.todayDay-1;
   let streak=0;
   for(let d=checkUpTo; d>=1 && days.has(d); d--) streak++;
-  const sb=0;
+
+  // ── STREAK MILESTONE BONUS ──────────────────────────────────────────────
+  // `sb` has been in the return shape and summed into `total` since the
+  // beginning, hardcoded to 0 — the slot was designed for and never filled.
+  //
+  // WHY THIS EXISTS. The personal streak was display-only: the one thing a
+  // member controls entirely on their own paid nothing, while the team streak
+  // — which depends on five other people showing up — was the only streak that
+  // scored. For anyone drifting, that is exactly backwards.
+  //
+  // Awarded per COMPLETED WEEK of an unbroken run, not once per run: 7 days
+  // pays 10, 14 pays 20, 21 pays 30. Continuing is worth as much as starting.
+  // A broken run resets the count, so the bonus can never be farmed by
+  // alternating days.
+  //
+  // Scoped to the season month like everything else here, so a run spanning a
+  // month boundary is counted within each month separately. That is the same
+  // rule perfect-week already uses, and keeping them consistent matters more
+  // than catching the handful of runs that straddle the 1st.
+  let sb=0;
+  {
+    const sorted=[...days].sort((a,b)=>a-b);
+    let run=0;
+    for(let i=0;i<sorted.length;i++){
+      run = (i>0 && sorted[i]===sorted[i-1]+1) ? run+1 : 1;
+      if(run%STREAK_MILESTONE_DAYS===0) sb += STREAK_MILESTONE_BONUS;
+    }
+  }
 
   // ── PERFECT WEEK ──
   // Rolling non-overlapping 7-day windows within the month.
@@ -285,8 +435,12 @@ function score(playerName, ctx){
     if(teamKm>=E.kmTarget && myKm>=KM_MIN_CONTRIBUTION) kmBonus=KM_CONTRIBUTOR_BONUS;
   }
 
-  const total=Math.max(0, base+sb+wb+rb+tb+b30+bossBonus+pen+dayBonuses+underdogBonus+jackBonus+ipBonus+kmBonus);
-  r={wo,base,sb,wb,rb,tb,b30,pen,bossBonus,dayBonuses,underdogBonus,jackBonus,ipBonus,kmBonus,myKm,teamKm,total,streak,days};
+  // Step Challenge: whatever this player's resolved weeks froze for them. Zero
+  // for everyone until a week is actually settled, and zero forever in a season
+  // where the challenge was never switched on.
+  const stepBonus=E.stepAwards.get(playerName)||0;
+  const total=Math.max(0, base+sb+wb+rb+tb+b30+bossBonus+pen+dayBonuses+underdogBonus+jackBonus+ipBonus+kmBonus+stepBonus);
+  r={wo,base,sb,wb,rb,tb,b30,pen,bossBonus,dayBonuses,underdogBonus,jackBonus,ipBonus,kmBonus,stepBonus,myKm,teamKm,total,streak,days};
   E.results.set(playerName,r);
   return r;
 }

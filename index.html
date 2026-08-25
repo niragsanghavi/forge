@@ -366,6 +366,10 @@
          Painted by renderHealthSuggestions(). D2: nothing here has left the
          phone; confirming creates a normal Forge log via submitLog(). -->
     <div id="healthSuggest"></div>
+    <!-- TODAY'S TEAM CALL. One line: how many more teammates need to log to keep
+         the streak alive today. Silent once the bar is met, and silent for solo
+         groups. renderTeamCall() owns it. -->
+    <div id="teamCall"></div>
     <!-- FOUNDER CARD — solo groups (numTeams 1) only. The invite loop: code,
          share, countdown to teams; flips to a split-into-teams nudge at 6.
          renderFounderCard() owns it; renders empty for every other group. -->
@@ -448,6 +452,9 @@
     <div id="weeklyMover"></div>
     <!-- Team distance goal. Renders nothing at all unless season.kmTarget is set. -->
     <div id="kmGoalCard"></div>
+    <!-- Weekly step challenge. Empty unless season.stepChallenge.enabled AND
+         running natively (a web user has no step source). -->
+    <div id="stepChallengeCard"></div>
     <div class="shdr" id="teamStandHdr">Team Standings</div>
     <!-- Solo groups hide this whole section, but the header above already
          shows during boot for them too, so the placeholder doesn't introduce a
@@ -739,6 +746,10 @@
         <label style="display:flex;align-items:center;gap:8px;margin-top:8px">
           <input type="checkbox" id="editDemo" style="width:auto;margin:0">
           <span>Demo / test group — hide from SuperDash and global stats</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:8px">
+          <input type="checkbox" id="editStepChallenge" style="width:auto;margin:0">
+          <span>Weekly step challenge — reads phone steps, native app only</span>
         </label>
         <div style="display:flex;gap:8px;margin-top:12px">
           <button class="btn btn-surface btn-sm" style="flex:1;margin:0" onclick="closeEditGroup()">Cancel</button>
@@ -2265,7 +2276,7 @@ function renderWitnessStrip(){
 // every existing call site (refresh, switchGroup, boot) is unchanged.
 function renderHome(){
   if(!groupData||!me) return;
-  try { renderMirrorHome(); renderHealthSuggestions(); }
+  try { renderMirrorHome(); }
   catch(e){ logErr('renderMirrorHome', e); }
   // Its own guard, like every other renderer here. Sharing renderMirrorHome's
   // try meant a Health failure was logged under the wrong name AND a Mirror
@@ -2278,6 +2289,8 @@ function renderHome(){
   // must never take Home down with it.
   try { renderGoalRing(); }
   catch(e){ logErr('renderGoalRing', e); }
+  try { renderTeamCall(); }
+  catch(e){ logErr('renderTeamCall', e); }
   try { renderMondayRecap(); }
   catch(e){ logErr('renderMondayRecap', e); }
   try { renderFounderCard(); }
@@ -4561,7 +4574,267 @@ document.addEventListener('visibilitychange', function(){
   window._healthFgAt = now;
   try{ renderHealthSuggestions(); }
   catch(e){ logErr('healthForegroundRefresh', e); }
+  // The step challenge fills on the same signal, for the same reason: the day
+  // rolls over while the app sits in the background, and coming back to Forge
+  // is the moment to notice. Separately caught — a step failure must never stop
+  // the workout suggestions rendering.
+  try{ fillStepDays(); }
+  catch(e){ logErr('stepForegroundRefresh', e); }
+  // Settle last week if it has ended and nobody has settled it yet. Cheap when
+  // there is nothing to do (one existence check), and idempotent when there is.
+  try{ resolveStepWeekIfDue(); }
+  catch(e){ logErr('stepResolveForeground', e); }
 });
+
+/* ── THE STEP CHALLENGE: WRITE PATH ────────────────────────────────────────
+   Fills in every COMPLETED day of the current week that is not recorded yet,
+   then says what landed. Runs on app open and on every foreground.
+
+   NEVER TODAY. Today's step count climbs all day. Recording it would make the
+   board flicker, let people watch the race live, and turn "who won" into a
+   question of who refreshed last. Yesterday and earlier are final, which is
+   what a scoreboard needs.
+
+   IDEMPOTENT BY SHAPE, not by bookkeeping. Each day is a KEY in a map on one
+   doc per player per week, so writing 2026-09-01 five times sets the same key
+   five times. Opening the app repeatedly cannot double-count, and there is no
+   "already done" flag to get out of sync. That is also why it is one doc per
+   player per week rather than seven: a single merge write, and a single read
+   to draw the board.
+
+   BACKFILLS. Someone who does not open Forge from Monday to Thursday gets all
+   four days on Thursday, because both HealthKit and Health Connect serve
+   history. Missing the app is not the same as missing the steps.
+   ───────────────────────────────────────────────────────────────────────── */
+async function fillStepDays(){
+  // Every gate that makes this a no-op, cheapest first. Off-native, signed out,
+  // Health disconnected, or the challenge simply not switched on for this
+  // season — in all of those this function costs nothing and touches nothing.
+  if(!window.isNative || !isNative() || !healthEnabled()) return;
+  if(!season || !seasonId || !groupCode || !me || !me.name) return;
+  if(!isStepChallengeOn(season)) return;
+  if(window._stepFillInFlight) return;          // same re-entrancy shape as submitLog
+  window._stepFillInFlight = true;
+  try{
+    const now   = new Date();
+    const monday = weekMondayOf(now);
+    const yest   = new Date(now.getFullYear(), now.getMonth(), now.getDate()-1);
+    if(yest < monday) return;                   // it is Monday: nothing completed yet this week
+
+    const week    = getISOWeek(monday);
+    const docId   = week + '__' + String(me.name).toLowerCase().replace(/[^a-z0-9]+/g,'-');
+    const ref     = db.collection('groups').doc(groupCode).collection('seasons')
+                      .doc(seasonId).collection('stepWeeks').doc(docId);
+
+    // What is already recorded. A read failure must not cause a blind
+    // overwrite, so bail rather than guess — the next foreground retries.
+    let existing = {};
+    try{
+      const snap = await ref.get();
+      if(snap.exists) existing = (snap.data() || {}).days || {};
+    }catch(e){ logErr('fillStepDays: read', e); return; }
+
+    // Which completed days of this week are still missing.
+    const wanted = [];
+    for(let d = new Date(monday); d <= yest; d.setDate(d.getDate()+1)){
+      const key = ymdLocal(d);
+      if(existing[key] == null) wanted.push(key);
+    }
+    if(!wanted.length) return;
+
+    const steps = await healthDailySteps(monday, yest);
+    // Only the missing days, and only ones Health actually answered for. A day
+    // with no data stays ABSENT rather than being written as 0 — absent means
+    // "not known yet" and can still fill in later, whereas a stored 0 would
+    // freeze a genuine reading out forever.
+    const fresh = {};
+    for(const key of wanted){
+      const n = steps[key];
+      if(Number.isFinite(n) && n > 0) fresh[key] = Math.min(n, window.STEP_DAILY_CAP);
+    }
+    if(!Object.keys(fresh).length) return;
+
+    const days  = Object.assign({}, existing, fresh);
+    const total = Object.values(days).reduce((a,b)=>a+(Number(b)||0), 0);
+    const meRow = (season.roster||[]).find(p=>p && p.name===me.name) || {};
+    try{
+      await ref.set({
+        player: me.name, userId: meRow.userId || null, team: meRow.team || null,
+        week, weekStart: ymdLocal(monday),
+        days, total,
+        source: (window.Capacitor && Capacitor.platform === 'android') ? 'healthconnect' : 'healthkit',
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, {merge:true});
+    }catch(e){ logErr('fillStepDays: write', e); return; }
+
+    // Say what landed. One day is the overwhelmingly common case (you opened
+    // the app the morning after); the plural branch is the person coming back
+    // from a few days away, who should be told it caught up rather than left
+    // to wonder.
+    const keys = Object.keys(fresh).sort();
+    if(keys.length === 1){
+      toast('Yesterday’s steps recorded: ' + fresh[keys[0]].toLocaleString('en-IN'), 'success');
+    } else {
+      toast(keys.length + ' days of steps recorded: '
+            + Object.values(fresh).reduce((a,b)=>a+b,0).toLocaleString('en-IN') + ' total', 'success');
+    }
+    if(typeof renderHome === 'function'){ try{ renderHome(); }catch(e){ logErr('fillStepDays: rerender', e); } }
+  }catch(e){
+    logErr('fillStepDays', e);
+  }finally{
+    window._stepFillInFlight = false;
+  }
+}
+
+/* ── THE STEP CHALLENGE: WEEK RESOLUTION ───────────────────────────────────
+   Settles the week that just ended: reads every player's step doc for that
+   week, averages by team, picks the winner, and FREEZES the result into a
+   twistWindows doc — the exact doc the scoring engine reads and never recomputes
+   from (part 2). After this runs, the points exist and are immune to later
+   roster edits or the challenge being switched off.
+
+   NO ADMIN ACTION. Unlike Boss Week (an admin arms it each Sunday), the step
+   challenge runs every week it is enabled and settles itself. This is the
+   Iron-Pledge auto-settlement pattern: "results settle automatically once a
+   week has fully ended — nothing to click."
+
+   THE GRACE PERIOD. A week is not settled the instant Sunday ends. fillStepDays
+   writes Sunday's steps only when a person next opens the app, so settling at
+   00:00 Monday would miss everyone who opens Monday morning. STEP_RESOLVE_GRACE_H
+   (36h → Tuesday noon) gives Sunday's steps time to arrive before the result is
+   frozen. A week opened for the first time after that still fills, but too late
+   to change a settled result — the honest cost of not having a server cron.
+
+   RACE-SAFE BY RULE. Several phones may try to settle the same week at once.
+   The doc id is deterministic (`step_week_<week>`), the twistWindows rule is
+   create-only (update:false), and the computation is deterministic (same step
+   docs → same winner), so the first write wins and every other is a rejected
+   no-op writing the identical answer. No transaction needed.
+
+   FORGED STEP DOCS ARE UNTRUSTED. stepWeeks lives in a collection any client can
+   write (identity can't be verified under anon auth), so each player total is
+   re-clamped here on read. A forged total can at worst make the WRONG team win;
+   it cannot inflate the payout, which part 2 caps at STEP_BONUS_MAX_PER_WEEK. */
+window.STEP_RESOLVE_GRACE_H = 36;
+
+async function resolveStepWeekIfDue(){
+  if(!window.isNative || !isNative()) return;            // no health data source at all
+  if(!season || !seasonId || !groupCode) return;
+  if(!isStepChallengeOn(season)) return;
+  if(window._stepResolveInFlight) return;
+  window._stepResolveInFlight = true;
+  try{
+    const now = new Date();
+    const thisMonday = weekMondayOf(now);
+    // The week that just ended is the one whose Monday is 7 days before this
+    // week's Monday.
+    const lastMonday = new Date(thisMonday.getFullYear(), thisMonday.getMonth(), thisMonday.getDate()-7);
+    // It ended at the start of THIS Monday; settle only once the grace has passed.
+    const settleAfter = new Date(thisMonday.getTime() + window.STEP_RESOLVE_GRACE_H*3600000);
+    if(now < settleAfter) return;
+
+    // Scope to THIS season. If the season rolled over since last week, that
+    // week belongs to an archived season and is out of scope for this pass —
+    // resolving into an archived season is deliberately not done here.
+    if(lastMonday.getMonth()+1 !== season.month || lastMonday.getFullYear() !== season.year) return;
+
+    const week   = getISOWeek(lastMonday);
+    const winId  = 'step_week_' + week;
+    const sRef   = db.collection('groups').doc(groupCode).collection('seasons').doc(seasonId);
+    const winRef = sRef.collection('twistWindows').doc(winId);
+
+    // Already settled? One existence check, and the cheap common case.
+    try{
+      const winSnap = await winRef.get();
+      if(winSnap.exists && Array.isArray((winSnap.data()||{}).awarded)) return;
+    }catch(e){ logErr('resolveStepWeek: window read', e); return; }
+
+    // Everyone's steps for that week.
+    let stepDocs = [];
+    try{
+      const q = await sRef.collection('stepWeeks').where('week','==',week).get();
+      stepDocs = q.docs.map(d=>d.data());
+    }catch(e){ logErr('resolveStepWeek: stepWeeks read', e); return; }
+    if(!stepDocs.length) return;                          // nobody logged a step — nothing to settle
+
+    // Per-player total, RE-CLAMPED from the day map (never trust the stored
+    // `total`), keyed by roster name so a forged doc for a non-member is ignored.
+    const roster = (season.roster||[]).filter(p=>p && p.departed!==true);
+    const teamOf = new Map(roster.map(p=>[p.name, p.team]));
+    const byPlayer = new Map();
+    for(const d of stepDocs){
+      if(!d || !teamOf.has(d.player)) continue;           // only current, non-departed members count
+      let t = 0;
+      const days = (d.days && typeof d.days==='object') ? d.days : {};
+      for(const k of Object.keys(days)){
+        const n = Number(days[k]);
+        if(Number.isFinite(n) && n>0) t += Math.min(n, window.STEP_DAILY_CAP);
+      }
+      byPlayer.set(d.player, t);
+    }
+
+    // Team average over the FULL team size (a member who logged nothing counts
+    // as a zero — that is what makes it a team effort, not a top-walker contest).
+    const teamSum = new Map(), teamSize = new Map();
+    for(const p of roster){
+      teamSize.set(p.team, (teamSize.get(p.team)||0)+1);
+      teamSum.set(p.team, (teamSum.get(p.team)||0)+(byPlayer.get(p.name)||0));
+    }
+    const teams = [...teamSize.keys()].map(t=>({
+      team:t, size:teamSize.get(t), sum:teamSum.get(t)||0,
+      avg:(teamSum.get(t)||0)/(teamSize.get(t)||1)
+    })).sort((a,b)=>b.avg-a.avg);
+    if(!teams.length) return;
+
+    const target = stepTargetOf(season);
+    let winnerTeam=null, cleared=false;
+    if(teams.length === 1){
+      // Solo / single team: no opponent, so the target IS the contest.
+      if(teams[0].avg >= target){ winnerTeam=teams[0].team; cleared=true; }
+    } else {
+      // Highest average wins. A dead-heat for first pays nobody — a coin-flip
+      // bonus would feel worse than none.
+      if(teams[0].avg > teams[1].avg){
+        winnerTeam = teams[0].team;
+        cleared = teams[0].avg >= target;
+      }
+    }
+
+    const awarded = winnerTeam ? roster.filter(p=>p.team===winnerTeam).map(p=>p.name) : [];
+    const docData = {
+      twist:'step_week', week,
+      monDate:lastMonday.getDate(),
+      sunDate:new Date(lastMonday.getFullYear(),lastMonday.getMonth(),lastMonday.getDate()+6).getDate(),
+      month:lastMonday.getMonth()+1, year:lastMonday.getFullYear(),
+      bonus: stepBonusOf(season),
+      winner: winnerTeam, awarded, cleared, target,
+      // A compact record of how it was decided, for the board's "last week" card.
+      standings: teams.map(t=>({team:t.team, avg:Math.round(t.avg)})),
+      resolvedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    try{
+      // .set() on an existing doc is an UPDATE, which the create-only rule
+      // rejects — so a second racer fails here harmlessly. Swallow that; log
+      // anything else.
+      await winRef.set(docData);
+    }catch(e){
+      const msg = String(e && e.message || e);
+      if(!/PERMISSION_DENIED|already exists|Missing or insufficient/i.test(msg)) logErr('resolveStepWeek: write', e);
+      return;
+    }
+
+    if(winnerTeam){
+      const mine = (season.roster||[]).some(p=>p && p.name===me?.name && p.team===winnerTeam);
+      toast(mine ? `Your team won last week’s step challenge — +${stepBonusOf(season)} each 🔥`
+                 : `Team ${winnerTeam} won last week’s step challenge.`, 'success');
+    }
+    if(typeof renderHome === 'function'){ try{ renderHome(); }catch(e){ logErr('resolveStepWeek: rerender', e); } }
+  }catch(e){
+    logErr('resolveStepWeekIfDue', e);
+  }finally{
+    window._stepResolveInFlight = false;
+  }
+}
 
 // month/year are passed explicitly because the suggestion already knows them:
 // healthRecentWorkouts reads them off the HealthKit sample's own start date. The
@@ -6120,9 +6393,94 @@ function renderKmGoal(){
     </div>`;
 }
 
+/* ── THE STEP CHALLENGE: BOARD CARD ────────────────────────────────────────
+   Two things stacked: THIS week's live team averages (a read, lightly cached),
+   and LAST week's frozen result (free — it is already in the twistWindows
+   global the season listener keeps warm). Empty unless the challenge is on AND
+   we are native, so a web user never sees a card they cannot play.
+
+   ⚠️ VISUAL QA OWED. This is the one part of the challenge that could not be
+   verified without a browser/device (native-only, challenge-on). The markup
+   reuses the km card's classes; confirm on a real phone once the app is live.  */
+window._stepWeekCache = null;   // { week, at, teams:[{team,avg,size,members}] }
+async function renderStepChallenge(){
+  const el=document.getElementById('stepChallengeCard');
+  if(!el) return;
+  if(!(window.isNative && isNative()) || !season || !isStepChallengeOn(season)){ el.innerHTML=''; return; }
+
+  const target=stepTargetOf(season);
+  const roster=(season.roster||[]).filter(p=>p && p.departed!==true);
+  const myTeam=me?me.team:null;
+  const nf=n=>Math.round(n).toLocaleString('en-IN');
+
+  // LAST week's frozen result — from the already-loaded twistWindows global.
+  const now=new Date();
+  const lastMon=new Date(weekMondayOf(now).getTime()-7*86400000);
+  const lastWeek=getISOWeek(lastMon);
+  const resolved=(twistWindows||[]).find(w=>w && w.twist==='step_week' && w.week===lastWeek);
+  let lastHtml='';
+  if(resolved && Array.isArray(resolved.awarded)){
+    if(resolved.winner){
+      const mineWon=myTeam && resolved.winner===myTeam;
+      lastHtml=`<div class="km-rfoot" style="margin-top:10px">
+        <b>Last week:</b> Team ${esc(resolved.winner)} won${resolved.cleared?' and cleared the target':''}
+        — +${resolved.bonus} each${mineWon?' · that was you 🔥':''}</div>`;
+    } else {
+      lastHtml=`<div class="km-rfoot" style="margin-top:10px"><b>Last week</b> ended in a dead heat — no bonus.</div>`;
+    }
+  }
+
+  // THIS week's live averages. Read the current week's step docs, cached 5 min
+  // so repeated Home renders do not each hit Firestore.
+  const thisWeek=getISOWeek(weekMondayOf(now));
+  let teams=[];
+  try{
+    const c=window._stepWeekCache;
+    if(c && c.week===thisWeek && (Date.now()-c.at)<300000){
+      teams=c.teams;
+    } else {
+      const snap=await db.collection('groups').doc(groupCode).collection('seasons')
+        .doc(seasonId).collection('stepWeeks').where('week','==',thisWeek).get();
+      const byPlayer=new Map();
+      snap.docs.forEach(d=>{
+        const x=d.data()||{}; if(!x.player) return;
+        let t=0; const days=(x.days&&typeof x.days==='object')?x.days:{};
+        for(const k of Object.keys(days)){ const n=Number(days[k]); if(Number.isFinite(n)&&n>0) t+=Math.min(n,window.STEP_DAILY_CAP); }
+        byPlayer.set(x.player,t);
+      });
+      const sum=new Map(), size=new Map();
+      roster.forEach(p=>{ size.set(p.team,(size.get(p.team)||0)+1); sum.set(p.team,(sum.get(p.team)||0)+(byPlayer.get(p.name)||0)); });
+      teams=[...size.keys()].map(t=>({team:t, size:size.get(t), avg:(sum.get(t)||0)/(size.get(t)||1)})).sort((a,b)=>b.avg-a.avg);
+      window._stepWeekCache={ week:thisWeek, at:Date.now(), teams };
+    }
+  }catch(e){ logErr('renderStepChallenge: read', e); /* fall through to header-only */ }
+
+  const rows=teams.map(t=>{
+    const pct=Math.max(4, Math.min(100, Math.round(t.avg/target*100)));
+    const mine=t.team===myTeam;
+    return `<div class="km-row${mine?' km-mine':''}${t.avg>=target?' km-done':''}">
+      <div class="km-rhead">
+        <span class="km-tname">Team ${esc(t.team)}${mine?' · you':''}</span>
+        <span class="km-tval">${nf(t.avg)}<span class="km-of"> / ${nf(target)} avg</span></span>
+      </div>
+      <div class="km-track"><div class="km-fill" style="width:${pct}%"></div></div>
+      <div class="km-rfoot">${t.avg>=target?'<b>Target cleared</b>':nf(Math.max(0,target-t.avg))+' steps/head to go'} · ${t.size} in the team</div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML=`<div class="shdr">Step Challenge — ${nf(target)}/person this week</div>
+    <div class="card km-card">
+      <div class="km-intro">Every step your phone counts. Highest team <b>average</b> by Sunday wins
+        <b>+${stepBonusOf(season)} points</b> each — a free workout. Yesterday and earlier only; today keeps climbing.</div>
+      ${rows||'<div class="km-rfoot">No steps in yet this week — open the app tomorrow and yesterday’s land automatically.</div>'}
+      ${lastHtml}
+    </div>`;
+}
+
 function renderLB(){
   try{ renderWeeklyMover(); }catch(e){ logErr('renderWeeklyMover', e); }
   try{ renderKmGoal(); }catch(e){ logErr('renderKmGoal', e); }
+  try{ renderStepChallenge(); }catch(e){ logErr('renderStepChallenge', e); }
   if(!season) return;
   const players=season.roster||[];
   const teams=[...new Set(players.map(p=>p.team))];
@@ -6222,6 +6580,119 @@ function renderLB(){
 }
 
 // ── FEED ──────────────────────────────────────────────────────────────────
+/* ── TODAY'S TEAM CALL ─────────────────────────────────────────────────────
+   The absence half of the streak work. A team streak breaks silently: nothing
+   tells anyone it is about to, and by the time the board shows a zero the day
+   is gone. This is one line on Home saying how many more teammates need to log
+   today — while it is still fixable.
+
+   Measured 22 Aug 2026: after someone's first break, a gap of up to 7 days ends
+   with them returning 92% of the time; past 8 days, only 33%. So the useful
+   moment for any nudge is TODAY, not at month end and not in a weekly digest.
+
+   Mirrors the engine's denominator exactly — members who have logged at least
+   once this month, floor of 1 — because a call to action that disagrees with
+   the scoring would be worse than none. If that rule changes, change it here.
+
+   Deliberately never names who is missing. "Two more of you" is a nudge;
+   "waiting on Siri" is a pile-on, in a group where these people see each other
+   every day. Silent when the bar is already met, and silent for solo groups,
+   so it stays worth reading. */
+function renderTeamCall(){
+  const el=document.getElementById('teamCall');
+  if(!el) return;
+  el.innerHTML='';
+  if(!season || !me) return;
+  if(typeof isSoloMode==='function' && isSoloMode()) return;
+
+  const now=new Date();
+  if(now.getMonth()+1!==season.month || now.getFullYear()!==season.year) return;   // viewing a closed month
+  const today=now.getDate();
+
+  const roster=(season.roster||[]).filter(p=>p && p.departed!==true);
+  const mine=roster.filter(p=>p.team===me.team);
+  if(mine.length<2) return;
+
+  const live=(allLogs||[]).filter(l=>l && l.voided!==true);
+  const playing=new Set(live.map(l=>l.player));
+  const denom=mine.filter(p=>playing.has(p.name)).length;
+  const need=Math.max(1, Math.ceil(denom*(season.teamStreakThreshold ?? 0.6)));
+  const doneToday=new Set(live.filter(l=>l.day===today && mine.some(p=>p.name===l.player)).map(l=>l.player));
+  const short=need-doneToday.size;
+  if(short<=0) return;                       // bar already met — say nothing
+
+  const iLogged=doneToday.has(me.name);
+  const msg = short===1
+    ? (iLogged ? 'One more teammate keeps the streak alive today.'
+               : 'One more of you keeps the streak alive today — it can be you.')
+    : `${short} more of you needed today to keep the streak alive.`;
+
+  el.innerHTML=`<div style="background:var(--bg-card-2);border:1px solid var(--hairline);border-left:3px solid var(--orange);border-radius:10px;padding:11px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
+    ${flameIco('flk-s')}
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:700;color:var(--text)">${esc(msg)}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:1px">Team ${esc(me.team)} · ${doneToday.size} of ${need} in</div>
+    </div>
+  </div>`;
+}
+
+/* ── STREAK MILESTONES IN THE FEED ─────────────────────────────────────────
+   DERIVED, never stored. Every milestone is recomputed from allLogs, which the
+   season listener already holds — so this costs ZERO extra Firestore reads,
+   has no write path for anyone to forge, and self-heals: void a log and the
+   milestone it created disappears on the next render.
+
+   WHY IT EXISTS. Someone pulls ahead on the board and nobody knows why. Points
+   accrue invisibly, so a member who is quietly on a 21-day run looks to
+   everyone else like someone who is simply winning. Naming the moment turns an
+   opaque scoreboard into a story the group can follow — and it is the only
+   thing in Forge that puts one member's effort in front of the others.
+
+   Mirrors STREAK_MILESTONE_DAYS in the scoring engine. If that changes, change
+   the 7 here too — they are deliberately the same number, not a coincidence. */
+function feedMilestones(){
+  const out=[];
+  try{
+    const roster=(season.roster||[]).filter(p=>p && p.departed!==true);
+    const byPlayer=new Map();
+    (allLogs||[]).forEach(l=>{
+      if(!l || l.voided===true || !l.player) return;
+      if(!byPlayer.has(l.player)) byPlayer.set(l.player,new Set());
+      byPlayer.get(l.player).add(l.day);
+    });
+    for(const p of roster){
+      const ds=[...(byPlayer.get(p.name)||[])].sort((a,b)=>a-b);
+      let run=0;
+      for(let i=0;i<ds.length;i++){
+        run=(i>0 && ds[i]===ds[i-1]+1) ? run+1 : 1;
+        // The milestone belongs to the DAY THE RUN REACHED IT, not to today —
+        // so it stays anchored in the feed's timeline like any other event.
+        if(run%7===0) out.push({name:p.name, team:p.team, day:ds[i], days:run});
+      }
+    }
+  }catch(e){ logErr('feedMilestones', e); }
+  return out.sort((a,b)=>b.day-a.day);
+}
+
+// One line of text a member can paste into the group's WhatsApp. Forge has no
+// push notifications, and building them means FCM plus a server — so until then
+// the group chat IS the notification channel, and this meets it where it is.
+function shareMilestones(){
+  try{
+    const now=new Date();
+    const today=(now.getMonth()+1===season.month && now.getFullYear()===season.year) ? now.getDate() : 31;
+    const recent=feedMilestones().filter(m=>today-m.day<=7);
+    if(!recent.length){ toast('No streak milestones in the last week yet.'); return; }
+    const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const lines=recent.map(m=>`${m.name} — ${m.days} days in a row (+${m.days/7*10} pts)`);
+    const txt=`🔨 ${groupData?.name||'Forge'} — this week's streaks\n\n${lines.join('\n')}\n\n${MN[season.month-1]} standings: goforge.in`;
+    if(navigator.share){ navigator.share({text:txt}).catch(()=>{}); return; }
+    navigator.clipboard.writeText(txt)
+      .then(()=>toast('Copied — paste it into the group chat.','success'))
+      .catch(()=>toast('Could not copy on this device.','error'));
+  }catch(e){ logErr('shareMilestones', e); toast('Could not build the message.','error'); }
+}
+
 function renderFeed(){
   // PASS-2 FIX 1a — a just-written log's serverTimestamp() is NULL in the local
   // offline echo until the server acks. The old `||0` sorted those brand-new
@@ -6288,6 +6759,24 @@ function renderFeed(){
       <div style="font-size:10px;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:.5px;margin-top:2px">${topStreakers.length<=3?'Longest active streak':topStreakers.length+' players tied — check the board'}</div>
     </div>`:''}
   </div>`;
+
+  // Milestones from the last 7 days, newest first. Silent when there are none —
+  // an empty "achievements" box every day would train people to ignore the space.
+  const _ms=feedMilestones().filter(m=>todayDay>0 && todayDay-m.day<=7 && todayDay-m.day>=0);
+  if(_ms.length){
+    statsHTML += `<div style="background:var(--gold-l);border:1px solid var(--gold);border-radius:10px;padding:12px 14px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+        <div style="font-size:10px;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:.5px">Streaks this week</div>
+        <button onclick="shareMilestones()" style="background:none;border:1px solid var(--gold);color:var(--orange);font-size:10px;font-weight:700;padding:4px 9px;border-radius:99px;cursor:pointer">Share</button>
+      </div>
+      ${_ms.slice(0,4).map(m=>`<div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:13px">
+        ${flameIco('flk-s')}
+        <span style="font-weight:800;color:${tcol(m.team)}">${esc(m.name)}</span>
+        <span style="color:var(--text)">hit ${m.days} days in a row</span>
+        <span style="margin-left:auto;font-weight:800;color:var(--orange)">+${m.days/7*10}</span>
+      </div>`).join('')}
+    </div>`;
+  }
 
   if(sorted.length===0){ document.getElementById('feedList').innerHTML=statsHTML+'<div class="tmuted">No workouts logged yet. Be the first! '+flameIco('flk-s')+'</div>'; return; }
   // PASS-2 FIX 5 — feed rows: full block tinted the player's TEAM colour, name
@@ -6686,12 +7175,6 @@ async function renamePlayer(oldName){
   }
 }
 
-// S3 §4.1 PIN reset: clears BOTH roster.pin (legacy) and users.pinHash (S1)
-// in the SAME transaction — a partial reset (one cleared, not the other)
-// would leave the player unable to log in via either path, or worse, still
-// loggable-in via their OLD pin through whichever path didn't clear. Puts
-// the player back into the existing grace-flow state (no pin yet); their
-// next name-pick routes them straight into setting a new one.
 // PIN RESET IS A SERVER CALL NOW, and it has to be. This used to clear
 // roster.pin and users.pinHash from here in one transaction. Then the 17 Aug
 // rules made pinHash WRITE-ONCE from any client — deliberately, because
@@ -7311,6 +7794,9 @@ async function openEditGroup(code){
     window._editGroupCode=code;
     window._editSeasonId=sid;
     window._editRoster=s.roster||[];
+    // Kept so saveEditGroup can preserve nested config (step-challenge target/
+    // bonus) when only the on/off switch is touched.
+    window._editSeasonData=s;
 
     document.getElementById('editGroupNameInput').value = g.name || '';
     document.getElementById('editGroupName').textContent=`${g.name} (${sid})`;
@@ -7325,6 +7811,7 @@ async function openEditGroup(code){
     document.getElementById('editRoles').checked=(s.rolesEnabled!==false);
     // demo lives on the GROUP doc, not the season — it outlives any one month.
     document.getElementById('editDemo').checked=(g.demo===true);
+    document.getElementById('editStepChallenge').checked=!!(s.stepChallenge && s.stepChallenge.enabled===true);
 
     document.getElementById('editGroupStatus').textContent='';
     document.getElementById('editGroupModal').classList.remove('hidden');
@@ -7347,12 +7834,13 @@ async function saveEditGroup(){
   const days=parseInt(document.getElementById('editDays').value)||30;
   const capTarget=parseInt(document.getElementById('editCapTarget').value)||16;
   const vcTarget=parseInt(document.getElementById('editVCTarget').value)||20;
-  // parseInt('0') is 0, which is FALSY — so `||12` silently rewrote a deliberate
-  // zero back into twelve and the min-workout penalty could never be switched
-  // off from the admin panel at all. Validate the parse instead of leaning on
-  // truthiness; 0 is a legitimate setting (pause the penalty), 12 stays the
-  // fallback for a blank or unparseable box.
-  const _mwRaw=parseInt(document.getElementById('editMinWO').value,10);
+  // `|| 12` swallowed a deliberate ZERO: parseInt('0') is 0, and 0 || 12 is 12,
+  // so an admin turning the month-end penalty off silently turned it back on at
+  // full strength. Found 22 Aug 2026 while trying to disable the penalty before
+  // it wiped 26 people. `??` only falls back when the value is genuinely absent,
+  // which is what was meant. The scoring engine already honours 0 correctly
+  // (cfg.minWorkouts ?? 12) — only this save path was wrong.
+  const _mwRaw=parseInt(document.getElementById('editMinWO').value);
   const minWorkouts=Number.isFinite(_mwRaw) && _mwRaw>=0 ? _mwRaw : 12;
   const numTeams=Math.min(3,Math.max(1,parseInt(document.getElementById('editNumTeams').value)||3));
   const thresholdPct=Math.min(100,Math.max(30,parseInt(document.getElementById('editThreshold').value)||60));
@@ -7364,6 +7852,12 @@ async function saveEditGroup(){
   const kmTarget=(_kmRaw!=='' && Number.isFinite(_kmNum) && _kmNum>0) ? Math.min(10000,_kmNum) : null;
   const rolesEnabled=document.getElementById('editRoles').checked;
   const isDemo=document.getElementById('editDemo').checked;
+  // Step challenge lives on the SEASON as a nested object so its own config
+  // (target, bonus) can travel with the toggle. Preserve any existing config
+  // when flipping the switch rather than clobbering an admin's overrides.
+  const _stepOn=document.getElementById('editStepChallenge').checked;
+  const _stepPrev=(window._editSeasonData && window._editSeasonData.stepChallenge) || {};
+  const stepChallenge=Object.assign({}, _stepPrev, {enabled:_stepOn});
 
   // ── Guard: reducing team count while players sit on a vanishing team ──
   // Generalised from the old numTeams===2-only check. Dropping to 1 strands
@@ -7411,14 +7905,15 @@ async function saveEditGroup(){
         days, capTarget, vcTarget, minWorkouts, numTeams,
         teamStreakThreshold: thresholdPct/100,
         kmTarget,
-        rolesEnabled
+        rolesEnabled,
+        stepChallenge
       })
     ]);
     // Update panel title immediately so it reflects the new name before loadSuperAdmin reloads.
     document.getElementById('editGroupName').textContent=`${newGroupName} (${sid})`;
     // If we're editing the group we're currently viewing in-app, refresh local in-memory state.
     if(window.season && window.seasonId===sid && window.groupCode===code){
-      Object.assign(window.season,{days,capTarget,vcTarget,minWorkouts,numTeams,teamStreakThreshold:thresholdPct/100,kmTarget,rolesEnabled});
+      Object.assign(window.season,{days,capTarget,vcTarget,minWorkouts,numTeams,teamStreakThreshold:thresholdPct/100,kmTarget,rolesEnabled,stepChallenge});
     }
     if(window.groupData && window.groupCode===code){ window.groupData.name=newGroupName; window.groupData.demo=isDemo; }
     status.textContent='✅ Saved.';
@@ -8576,6 +9071,14 @@ let globalDataCacheTime = 0;
 // denormalise into ONE summary doc alongside analytics/global/daily, dropping
 // the cost from G reads to 1. That needs a writer and a backfill, so it is a
 // deliberate piece of work rather than something to bolt on mid-batch.
+// MEASURED 18 Aug 2026 (crash test, 5,000-user simulation). The projection
+// above is confirmed: 1,000 users / 83 groups = 84,000 reads/day, 168% of the
+// free tier. The exact crossover, solving users × (users/12 + 1) = 50,000, is
+// ~775 USERS — around 65 groups. That is the real number to plan against, and
+// it is the FIRST wall Forge hits: the scoring engine itself was measured
+// linear and comfortable to 5,000 people in a single group (223ms), so CPU is
+// nowhere near being the constraint. Reads are, and they grow as users × groups
+// — quadratic, so doubling the user base roughly quadruples the bill.
 const GLOBAL_CACHE_TTL = 30 * 60 * 1000; // 30 minutes — see the ceiling above
 
 // ── GLOBAL LEADERBOARD (cross-group, opt-in) ───────────────────────────────
