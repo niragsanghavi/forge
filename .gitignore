@@ -45,3 +45,9 @@ xcuserdata/
 # negation inside an excluded DIRECTORY is unreachable — git never descends
 # into it. Keeping the build script under the tracked ios/ tree is simpler than
 # unpicking that rule.
+
+# IDE state, internal design canvases, and admin CLI tooling — none of it
+# belongs on a public Pages site. scripts/ was already ignored; these two were
+# tracked from before that rule and have been served at goforge.in ever since.
+.idea/
+*.dc.html
