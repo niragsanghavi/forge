@@ -724,6 +724,7 @@
     <div id="superDashRoot" style="min-width:0"></div>
     <div id="rolloverNudge" style="margin-top:12px"></div>
     <div class="shdr" style="margin-top:20px">Manage Groups</div>
+    <div style="margin:0 0 10px"><button class="btn btn-surface btn-sm" style="margin:0" onclick="superTestPush()">Send test notification</button></div>
     <div id="superGroupList"></div>
 
     <!-- Edit group settings (hidden until ⚙ Manage) -->
@@ -7745,6 +7746,26 @@ async function toggleSurveyAsk(code, on){
              : 'Survey off. Nobody new will be asked.', 'success');
     loadSuperAdmin();
   }catch(e){ logErr('toggleSurveyAsk '+code, e); toast('Could not change the survey setting.','error'); }
+}
+
+// ── TEST NOTIFICATION (superadmin) ──────────────────────────────────────────
+// End-to-end pipe test: sends "the pipe works" to every registered push token
+// via the testPush callable, which is gated on the same server key as the PIN
+// reset. During the pilot the only tokens are the tester's own devices.
+async function superTestPush(){
+  const adminKey = prompt('Admin key to send a test notification to every registered device.');
+  if(adminKey === null) return;
+  if(!adminKey.trim()){ toast('Admin key is required.','error'); return; }
+  try{
+    const r = await callFunction('testPush', { adminKey: adminKey.trim() });
+    toast(`Test sent: ${r.sent} delivered, ${r.tokens} token(s) known, ${r.pruned} pruned.`, r.sent ? 'success' : 'default');
+  }catch(e){
+    logErr('superTestPush', e);
+    const code = String((e && e.code) || '').replace(/^functions\//,'');
+    toast(code==='permission-denied' ? 'That admin key is not right.'
+        : code==='not-found' ? 'testPush is not deployed yet.'
+        : 'Test send failed.', 'error');
+  }
 }
 
 // ── SCORING V2 SWITCH (superadmin) ──────────────────────────────────────────
