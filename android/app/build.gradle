@@ -24,7 +24,7 @@ android {
         // duplicate version code, so this Capacitor build has to start at 2.
         // Bump it for EVERY upload — Play never accepts the same number twice,
         // even for a build you deleted.
-        versionCode 2
+        versionCode 3
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {

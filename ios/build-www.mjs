@@ -34,6 +34,10 @@ const INCLUDE = [
   // file also means it opens with no network, which a link to goforge.in
   // would not.
   'privacy.html',
+  // Onboarding step 1 links "how Forge works" — same reachability rule as the
+  // privacy policy: if it's linked from inside the app it must open with no
+  // network, from the bundle. Self-contained page; its exits are relative.
+  'guide.html',
   'src/style/main.css',
   'src/config/firebase.js',
   'src/state/appState.js',
